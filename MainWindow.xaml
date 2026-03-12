@@ -31,11 +31,29 @@
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     Padding="12">
-                <Grid RowDefinitions="Auto,*,Auto,Auto" RowSpacing="8">
+                <Grid RowDefinitions="Auto,Auto,*,Auto,Auto,Auto" RowSpacing="8">
                     <TextBlock Text="SSH 远程配置" FontSize="18" FontWeight="SemiBold" />
 
+                    <!-- 当前分享目标显示 -->
+                    <Border Grid.Row="1"
+                            CornerRadius="4"
+                            Background="{ThemeResource LayerFillColorDefaultBrush}"
+                            Padding="8"
+                            Margin="0,4,0,0">
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                            <FontIcon Glyph="&#xE890;" VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" Spacing="2">
+                                <TextBlock Text="当前分享目标" FontSize="12" Opacity="0.72" />
+                                <TextBlock x:Name="CurrentTargetTextBlock"
+                                           Text="未选择"
+                                           FontWeight="SemiBold"
+                                           Opacity="0.9" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
                     <ListView x:Name="RemoteListView"
-                              Grid.Row="1"
+                              Grid.Row="2"
                               SelectionMode="Single"
                               SelectionChanged="RemoteListView_SelectionChanged">
                         <ListView.ItemTemplate>
@@ -48,14 +66,20 @@
                         </ListView.ItemTemplate>
                     </ListView>
 
-                    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
+                    <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8">
                         <Button Content="新增" Click="AddRemoteButton_Click" />
                         <Button Content="编辑" Click="EditRemoteButton_Click" />
                         <Button Content="删除" Click="DeleteRemoteButton_Click" />
                         <Button Content="测试连接" Click="TestRemoteButton_Click" />
                     </StackPanel>
 
-                    <StackPanel Grid.Row="3" Spacing="6">
+                    <Button x:Name="SetAsTargetButton"
+                            Grid.Row="4"
+                            Content="设为分享目标"
+                            Click="SetAsTargetButton_Click"
+                            IsEnabled="False" />
+
+                    <StackPanel Grid.Row="5" Spacing="6">
                         <TextBlock Text="轮询间隔(秒)" />
                         <NumberBox x:Name="PollIntervalNumberBox"
                                    Minimum="1"
@@ -71,7 +95,7 @@
             </Border>
 
             <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto,Auto" RowSpacing="8">
-                <TextBlock Text="USB 拓扑与规则" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock Text="USB 设备分享" FontSize="18" FontWeight="SemiBold" />
 
                 <Border Grid.Row="1"
                         CornerRadius="8"
@@ -90,11 +114,13 @@
                                         <TextBlock Text="{Binding Content.Title}" Opacity="{Binding Content.TitleOpacity}" />
                                         <TextBlock Text="{Binding Content.Subtitle}" FontSize="12" Opacity="0.72" TextWrapping="WrapWholeWords" />
                                     </StackPanel>
-                                    <TextBlock Grid.Column="2"
-                                               Text="{Binding Content.AssignedSummary, Mode=OneWay}"
-                                               Foreground="{Binding Content.AssignmentBrush, Mode=OneWay}"
-                                               FontSize="12"
-                                               VerticalAlignment="Center" />
+                                    <!-- 启用状态图标 -->
+                                    <FontIcon Grid.Column="2"
+                                              Glyph="{Binding Content.StatusGlyph}"
+                                              Foreground="{Binding Content.StatusBrush, Mode=OneWay}"
+                                              FontSize="14"
+                                              VerticalAlignment="Center"
+                                              Visibility="{Binding Content.HasStatus, Mode=OneWay}" />
                                 </Grid>
                             </DataTemplate>
                         </TreeView.ItemTemplate>
@@ -110,14 +136,14 @@
                     <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
                         <TextBlock x:Name="SelectedNodeTextBlock" Text="选中节点: (无)" />
                         <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
-                            <ComboBox x:Name="RuleRemoteComboBox"
-                                      Width="320"
-                                      PlaceholderText="选择要分享到的远程" />
-                            <Button Content="保存规则" Click="SaveRuleButton_Click" />
-                            <Button Content="清除规则" Click="ClearRuleButton_Click" />
+                            <CheckBox x:Name="EnableDeviceCheckBox"
+                                      Content="启用分享"
+                                      Checked="EnableDeviceCheckBox_CheckedChanged"
+                                      Unchecked="EnableDeviceCheckBox_CheckedChanged"
+                                      IsEnabled="False" />
                         </StackPanel>
                         <TextBlock Grid.Row="2"
-                                   Text="规则优先级: Hub > Device；当命中多个祖先Hub且远程不同时，该设备被标记冲突并跳过。"
+                                   Text="提示: 勾选 Hub 后，其下的所有可分享设备将自动继承启用状态。灰色设备不可直接分享。"
                                    Opacity="0.78"
                                    TextWrapping="WrapWholeWords" />
                     </Grid>
@@ -133,7 +159,7 @@
         </Grid>
 
         <TextBlock Grid.Row="2"
-                   Text="提示: 灰色设备不可直接分享。选择 Hub 后其下新设备将自动继承分享目标。"
+                   Text="提示: 所有启用的设备将统一分享到左侧选中的远程服务器。"
                    Opacity="0.72" />
     </Grid>
 </Window>

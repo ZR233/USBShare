@@ -16,28 +16,29 @@ public sealed class ShareOrchestrator : IShareOrchestrator
 {
     private readonly IUsbipdService _usbipdService;
     private readonly IUsbTopologyService _usbTopologyService;
-    private readonly IRuleResolver _ruleResolver;
+    private readonly IDeviceEnabledResolver _deviceEnabledResolver;
     private readonly ISecretStore _secretStore;
     private readonly SemaphoreSlim _stateLock = new(1, 1);
     private readonly SemaphoreSlim _cycleLock = new(1, 1);
-    private readonly Dictionary<Guid, ISshRemoteSession> _sessions = [];
-    private readonly Dictionary<Guid, HashSet<string>> _attachedBySession = [];
+    private readonly HashSet<string> _attachedBusIds = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _boundBySession = new(StringComparer.OrdinalIgnoreCase);
 
     private AppConfig _config = new();
     private CancellationTokenSource? _loopCts;
     private Task? _loopTask;
     private ShareSessionState _state = new();
+    private ISshRemoteSession? _currentSession;
+    private RemoteConfig? _currentRemote;
 
     public ShareOrchestrator(
         IUsbipdService usbipdService,
         IUsbTopologyService usbTopologyService,
-        IRuleResolver ruleResolver,
+        IDeviceEnabledResolver deviceEnabledResolver,
         ISecretStore secretStore)
     {
         _usbipdService = usbipdService;
         _usbTopologyService = usbTopologyService;
-        _ruleResolver = ruleResolver;
+        _deviceEnabledResolver = deviceEnabledResolver;
         _secretStore = secretStore;
     }
 
@@ -62,6 +63,18 @@ public sealed class ShareOrchestrator : IShareOrchestrator
         try
         {
             _config = CloneConfig(config);
+
+            // 验证已选择远程服务器
+            if (!_config.Settings.SelectedRemoteId.HasValue)
+            {
+                throw new InvalidOperationException("请先选择一个远程服务器作为分享目标。");
+            }
+
+            if (!_config.Remotes.Any(r => r.Id == _config.Settings.SelectedRemoteId.Value))
+            {
+                throw new InvalidOperationException("选中的远程服务器不存在。请重新选择。");
+            }
+
             if (_loopTask is { IsCompleted: false })
             {
                 return;
@@ -72,6 +85,7 @@ public sealed class ShareOrchestrator : IShareOrchestrator
             {
                 state.IsRunning = true;
                 state.LastErrorsByKey.Clear();
+                state.ConflictsByInstanceId.Clear();
             });
 
             _loopTask = Task.Run(() => LoopAsync(_loopCts.Token), _loopCts.Token);
@@ -87,7 +101,18 @@ public sealed class ShareOrchestrator : IShareOrchestrator
         await _stateLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            var oldRemoteId = _config.Settings.SelectedRemoteId;
             _config = CloneConfig(config);
+            var newRemoteId = _config.Settings.SelectedRemoteId;
+
+            // 如果远程服务器发生变化，需要重新连接
+            if (oldRemoteId != newRemoteId && IsRunning)
+            {
+                SetState(state =>
+                {
+                    state.LastErrorsByKey["remote_change"] = "远程服务器已更改，将在下一个周期重新连接。";
+                });
+            }
         }
         finally
         {
@@ -175,74 +200,134 @@ public sealed class ShareOrchestrator : IShareOrchestrator
 
     private async Task ExecuteCycleAsync(AppConfig config, CancellationToken cancellationToken)
     {
-        var remotesById = config.Remotes.ToDictionary(remote => remote.Id);
+        // 获取选中的远程服务器
+        var selectedRemoteId = config.Settings.SelectedRemoteId;
+        if (!selectedRemoteId.HasValue)
+        {
+            SetError("remote", "未选择远程服务器。");
+            return;
+        }
+
+        var remote = config.Remotes.FirstOrDefault(r => r.Id == selectedRemoteId.Value);
+        if (remote is null)
+        {
+            SetError("remote", "选中的远程服务器不存在。");
+            return;
+        }
 
         var state = await _usbipdService.GetStateAsync(cancellationToken).ConfigureAwait(false);
         var topology = await _usbTopologyService.BuildSnapshotAsync(state, cancellationToken).ConfigureAwait(false);
-        var resolution = _ruleResolver.Resolve(topology, config.ShareRules, remotesById.Keys.ToArray());
+        var enabledResult = _deviceEnabledResolver.Resolve(topology, config.EnabledDevices);
 
+        // 清空冲突（新的简化模型没有冲突）
         SetState(sessionState =>
         {
-            sessionState.ConflictsByInstanceId = new Dictionary<string, string>(resolution.ConflictsByInstanceId, StringComparer.OrdinalIgnoreCase);
+            sessionState.ConflictsByInstanceId.Clear();
         });
 
-        await CleanupDetachedTargetsAsync(config, resolution.TargetsByBusId, cancellationToken).ConfigureAwait(false);
-        await EnsureDesiredTargetsAsync(config, remotesById, resolution.TargetsByBusId, cancellationToken).ConfigureAwait(false);
-        await CleanupStaleBindingsAsync(resolution.TargetsByBusId, cancellationToken).ConfigureAwait(false);
+        await EnsureSessionAsync(remote, cancellationToken).ConfigureAwait(false);
+        await CleanupDetachedDevicesAsync(enabledResult.EnabledBusIds.Keys, cancellationToken).ConfigureAwait(false);
+        await EnsureEnabledDevicesAsync(enabledResult.EnabledBusIds.Keys, cancellationToken).ConfigureAwait(false);
+        await CleanupStaleBindingsAsync(enabledResult.EnabledBusIds.Keys, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task CleanupDetachedTargetsAsync(
-        AppConfig config,
-        Dictionary<string, Guid> desiredTargets,
-        CancellationToken cancellationToken)
+    private async Task EnsureSessionAsync(RemoteConfig remote, CancellationToken cancellationToken)
     {
-        foreach (var pair in _attachedBySession.ToList())
+        // 如果远程服务器变更，先断开旧会话
+        if (_currentRemote is not null && _currentRemote.Id != remote.Id)
         {
-            var remoteId = pair.Key;
-            var attachedBusIds = pair.Value.ToList();
-            if (!_sessions.TryGetValue(remoteId, out var session))
+            await DisconnectSessionAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        // 创建新会话
+        if (_currentSession is null)
+        {
+            var session = new SshRemoteSession(remote);
+            var sshSecret = await _secretStore.GetSecretAsync(remote.Id, SecretKind.Ssh, cancellationToken).ConfigureAwait(false);
+            await session.ConnectAsync(sshSecret, cancellationToken).ConfigureAwait(false);
+
+            var probeResult = await session.ProbeAsync(cancellationToken).ConfigureAwait(false);
+            if (!probeResult.Success || !probeResult.Output.Contains("READY", StringComparison.OrdinalIgnoreCase))
+            {
+                await session.DisposeAsync().ConfigureAwait(false);
+                throw new InvalidOperationException(
+                    $"远程 {remote.DisplayTitle} 环境检查失败，请确认已安装 usbip 和 sudo。{CompactRemoteError(probeResult)}");
+            }
+
+            _currentSession = session;
+            _currentRemote = remote;
+            _attachedBusIds.Clear();
+        }
+    }
+
+    private async Task DisconnectSessionAsync(CancellationToken cancellationToken)
+    {
+        if (_currentSession is null)
+        {
+            return;
+        }
+
+        // Detach 所有设备
+        if (_currentRemote is not null)
+        {
+            var sudoPassword = await _secretStore.GetSecretAsync(_currentRemote.Id, SecretKind.Sudo, cancellationToken).ConfigureAwait(false);
+            foreach (var busId in _attachedBusIds.ToList())
+            {
+                var detachResult = await _currentSession.DetachAsync(busId, sudoPassword, cancellationToken).ConfigureAwait(false);
+                if (!detachResult.Success)
+                {
+                    SetError($"detach:{busId}", CompactRemoteError(detachResult));
+                }
+            }
+        }
+
+        await _currentSession.DisposeAsync().ConfigureAwait(false);
+        _currentSession = null;
+        _currentRemote = null;
+        _attachedBusIds.Clear();
+    }
+
+    private async Task CleanupDetachedDevicesAsync(IEnumerable<string> desiredBusIds, CancellationToken cancellationToken)
+    {
+        if (_currentSession is null || _currentRemote is null)
+        {
+            return;
+        }
+
+        var desiredSet = new HashSet<string>(desiredBusIds, StringComparer.OrdinalIgnoreCase);
+        var sudoPassword = await _secretStore.GetSecretAsync(_currentRemote.Id, SecretKind.Sudo, cancellationToken).ConfigureAwait(false);
+
+        foreach (var busId in _attachedBusIds.ToList())
+        {
+            if (desiredSet.Contains(busId))
             {
                 continue;
             }
 
-            var sudoPassword = await _secretStore.GetSecretAsync(remoteId, SecretKind.Sudo, cancellationToken).ConfigureAwait(false);
-            foreach (var busId in attachedBusIds)
+            var detachResult = await _currentSession.DetachAsync(busId, sudoPassword, cancellationToken).ConfigureAwait(false);
+            if (detachResult.Success)
             {
-                if (desiredTargets.TryGetValue(busId, out var desiredRemoteId) && desiredRemoteId == remoteId)
-                {
-                    continue;
-                }
-
-                var detachResult = await session.DetachAsync(busId, sudoPassword, cancellationToken).ConfigureAwait(false);
-                if (detachResult.Success)
-                {
-                    pair.Value.Remove(busId);
-                }
-                else
-                {
-                    SetError($"detach:{remoteId}:{busId}", CompactRemoteError(detachResult));
-                }
+                _attachedBusIds.Remove(busId);
+            }
+            else
+            {
+                SetError($"detach:{busId}", CompactRemoteError(detachResult));
             }
         }
     }
 
-    private async Task EnsureDesiredTargetsAsync(
-        AppConfig config,
-        Dictionary<Guid, RemoteConfig> remotesById,
-        Dictionary<string, Guid> desiredTargets,
-        CancellationToken cancellationToken)
+    private async Task EnsureEnabledDevicesAsync(IEnumerable<string> desiredBusIds, CancellationToken cancellationToken)
     {
-        foreach (var target in desiredTargets)
+        if (_currentSession is null || _currentRemote is null)
         {
-            var busId = target.Key;
-            var remoteId = target.Value;
+            return;
+        }
 
-            if (!remotesById.TryGetValue(remoteId, out var remote))
-            {
-                continue;
-            }
+        var sudoPassword = await _secretStore.GetSecretAsync(_currentRemote.Id, SecretKind.Sudo, cancellationToken).ConfigureAwait(false);
 
-            var session = await GetOrCreateSessionAsync(remote, cancellationToken).ConfigureAwait(false);
+        foreach (var busId in desiredBusIds)
+        {
+            // Bind 设备
             var bindResult = await _usbipdService.EnsureBoundAsync(busId, cancellationToken).ConfigureAwait(false);
             if (!bindResult.Success)
             {
@@ -251,7 +336,6 @@ public sealed class ShareOrchestrator : IShareOrchestrator
                 {
                     SetError("permission", "usbipd bind 需要管理员权限。");
                 }
-
                 continue;
             }
 
@@ -260,41 +344,35 @@ public sealed class ShareOrchestrator : IShareOrchestrator
                 _boundBySession.Add(busId);
             }
 
-            var attached = await session.IsAttachedAsync(busId, cancellationToken).ConfigureAwait(false);
-            if (attached)
+            // 检查是否已 attached
+            if (_attachedBusIds.Contains(busId))
             {
-                continue;
+                var isAttached = await _currentSession.IsAttachedAsync(busId, cancellationToken).ConfigureAwait(false);
+                if (isAttached)
+                {
+                    continue;
+                }
             }
 
-            var sudoPassword = await _secretStore.GetSecretAsync(remoteId, SecretKind.Sudo, cancellationToken).ConfigureAwait(false);
-            var attachResult = await session.AttachAsync(busId, sudoPassword, cancellationToken).ConfigureAwait(false);
+            // Attach 设备
+            var attachResult = await _currentSession.AttachAsync(busId, sudoPassword, cancellationToken).ConfigureAwait(false);
             if (!attachResult.Success)
             {
-                SetError($"attach:{remoteId}:{busId}", CompactRemoteError(attachResult));
+                SetError($"attach:{busId}", CompactRemoteError(attachResult));
                 continue;
             }
 
-            if (!_attachedBySession.TryGetValue(remoteId, out var attachedSet))
-            {
-                attachedSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                _attachedBySession[remoteId] = attachedSet;
-            }
-
-            attachedSet.Add(busId);
+            _attachedBusIds.Add(busId);
         }
     }
 
-    private async Task CleanupStaleBindingsAsync(
-        Dictionary<string, Guid> desiredTargets,
-        CancellationToken cancellationToken)
+    private async Task CleanupStaleBindingsAsync(IEnumerable<string> desiredBusIds, CancellationToken cancellationToken)
     {
-        var managedAttached = _attachedBySession.Values
-            .SelectMany(values => values)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var desiredSet = new HashSet<string>(desiredBusIds, StringComparer.OrdinalIgnoreCase);
 
         foreach (var busId in _boundBySession.ToList())
         {
-            if (desiredTargets.ContainsKey(busId) || managedAttached.Contains(busId))
+            if (desiredSet.Contains(busId) || _attachedBusIds.Contains(busId))
             {
                 continue;
             }
@@ -311,50 +389,9 @@ public sealed class ShareOrchestrator : IShareOrchestrator
         }
     }
 
-    private async Task<ISshRemoteSession> GetOrCreateSessionAsync(RemoteConfig remote, CancellationToken cancellationToken)
-    {
-        if (_sessions.TryGetValue(remote.Id, out var existing))
-        {
-            return existing;
-        }
-
-        var session = new SshRemoteSession(remote);
-        var sshSecret = await _secretStore.GetSecretAsync(remote.Id, SecretKind.Ssh, cancellationToken).ConfigureAwait(false);
-        await session.ConnectAsync(sshSecret, cancellationToken).ConfigureAwait(false);
-
-        var probeResult = await session.ProbeAsync(cancellationToken).ConfigureAwait(false);
-        if (!probeResult.Success || !probeResult.Output.Contains("READY", StringComparison.OrdinalIgnoreCase))
-        {
-            await session.DisposeAsync().ConfigureAwait(false);
-            throw new InvalidOperationException(
-                $"远程 {remote.DisplayTitle} 环境检查失败，请确认已安装 usbip 和 sudo。{CompactRemoteError(probeResult)}");
-        }
-
-        _sessions[remote.Id] = session;
-        _attachedBySession.TryAdd(remote.Id, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
-        return session;
-    }
-
     private async Task RollbackSessionResourcesAsync(CancellationToken cancellationToken)
     {
-        foreach (var pair in _attachedBySession.ToList())
-        {
-            var remoteId = pair.Key;
-            if (!_sessions.TryGetValue(remoteId, out var session))
-            {
-                continue;
-            }
-
-            var sudoPassword = await _secretStore.GetSecretAsync(remoteId, SecretKind.Sudo, cancellationToken).ConfigureAwait(false);
-            foreach (var busId in pair.Value.ToList())
-            {
-                var detach = await session.DetachAsync(busId, sudoPassword, cancellationToken).ConfigureAwait(false);
-                if (!detach.Success)
-                {
-                    SetError($"detach-stop:{remoteId}:{busId}", CompactRemoteError(detach));
-                }
-            }
-        }
+        await DisconnectSessionAsync(cancellationToken).ConfigureAwait(false);
 
         foreach (var busId in _boundBySession.ToList())
         {
@@ -366,14 +403,7 @@ public sealed class ShareOrchestrator : IShareOrchestrator
         }
 
         _boundBySession.Clear();
-        _attachedBySession.Clear();
-
-        foreach (var session in _sessions.Values.ToList())
-        {
-            await session.DisposeAsync().ConfigureAwait(false);
-        }
-
-        _sessions.Clear();
+        _attachedBusIds.Clear();
     }
 
     private static string CompactRemoteError(RemoteExecutionResult result)
@@ -414,7 +444,11 @@ public sealed class ShareOrchestrator : IShareOrchestrator
         return new AppConfig
         {
             Remotes = source.Remotes.Select(CloneRemote).ToList(),
-            ShareRules = source.ShareRules.Select(CloneRule).ToList(),
+            EnabledDevices = source.EnabledDevices.Select(device => new DeviceEnabled
+            {
+                NodeInstanceId = device.NodeInstanceId,
+                Enabled = device.Enabled,
+            }).ToList(),
             SecretRefs = source.SecretRefs.Select(reference => new SecretRef
             {
                 RemoteId = reference.RemoteId,
@@ -423,6 +457,7 @@ public sealed class ShareOrchestrator : IShareOrchestrator
             Settings = new AppSettings
             {
                 PollIntervalSeconds = source.Settings.PollIntervalSeconds,
+                SelectedRemoteId = source.Settings.SelectedRemoteId,
             },
         };
     }
@@ -439,17 +474,6 @@ public sealed class ShareOrchestrator : IShareOrchestrator
             AuthType = source.AuthType,
             KeyPath = source.KeyPath,
             TunnelPort = source.TunnelPort,
-        };
-    }
-
-    private static ShareRule CloneRule(ShareRule source)
-    {
-        return new ShareRule
-        {
-            NodeType = source.NodeType,
-            NodeInstanceId = source.NodeInstanceId,
-            RemoteId = source.RemoteId,
-            Enabled = source.Enabled,
         };
     }
 }

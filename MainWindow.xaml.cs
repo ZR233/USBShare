@@ -22,6 +22,7 @@ public sealed partial class MainWindow : Window
     private ShareSessionState _sessionState = new();
     private UsbTreeItemViewModel? _selectedNode;
     private bool _isAdmin;
+    private RemoteConfig? _selectedRemote;
 
     public MainWindow()
     {
@@ -32,22 +33,24 @@ public sealed partial class MainWindow : Window
         _orchestrator = new ShareOrchestrator(
             _usbipdService,
             _usbTopologyService,
-            new RuleResolver(),
+            new DeviceEnabledResolver(),
             _secretStore);
 
         _orchestrator.StateChanged += OnOrchestratorStateChanged;
         RootGrid.Loaded += MainWindow_Loaded;
         Closed += MainWindow_Closed;
-
-        RuleRemoteComboBox.DisplayMemberPath = nameof(RemoteChoiceItem.Label);
-        RuleRemoteComboBox.SelectedValuePath = nameof(RemoteChoiceItem.RemoteId);
     }
 
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
         await LoadConfigurationAsync();
+
+        // 执行配置迁移（如果需要）
+        ConfigMigration.Migrate(_config);
+        await SaveConfigurationAsync();
+
         RefreshRemoteList();
-        RefreshRuleRemoteOptions();
+        UpdateCurrentTargetDisplay();
         PollIntervalNumberBox.Value = _config.Settings.PollIntervalSeconds;
 
         _isAdmin = _adminService.IsRunningAsAdministrator();
@@ -62,7 +65,7 @@ public sealed partial class MainWindow : Window
                 return;
             }
 
-            AdminHintTextBlock.Text = "当前未获得管理员权限，无法执行 usbipd bind/unbind。请点击“管理员重启”。";
+            AdminHintTextBlock.Text = "当前未获得管理员权限，无法执行 usbipd bind/unbind。请点击"管理员重启"。";
 #endif
             StartShareButton.IsEnabled = false;
         }
@@ -102,22 +105,17 @@ public sealed partial class MainWindow : Window
             .ToList();
     }
 
-    private void RefreshRuleRemoteOptions()
+    private void UpdateCurrentTargetDisplay()
     {
-        var options = new List<RemoteChoiceItem>
+        if (_config.Settings.SelectedRemoteId.HasValue)
         {
-            new() { RemoteId = null, Label = "(不分享)" },
-        };
-
-        options.AddRange(_config.Remotes
-            .OrderBy(remote => remote.DisplayTitle, StringComparer.CurrentCultureIgnoreCase)
-            .Select(remote => new RemoteChoiceItem
-            {
-                RemoteId = remote.Id,
-                Label = remote.DisplayTitle,
-            }));
-
-        RuleRemoteComboBox.ItemsSource = options;
+            var target = _config.Remotes.FirstOrDefault(r => r.Id == _config.Settings.SelectedRemoteId.Value);
+            CurrentTargetTextBlock.Text = target is not null ? target.DisplayTitle : "（已删除）";
+        }
+        else
+        {
+            CurrentTargetTextBlock.Text = "未选择";
+        }
     }
 
     private async Task RefreshTopologyAsync()
@@ -156,7 +154,7 @@ public sealed partial class MainWindow : Window
             UsbTreeView.RootNodes.Add(BuildTreeViewNode(vm));
         }
 
-        ApplyAssignmentsAndConflicts();
+        ApplyEnabledStates();
     }
 
     private UsbTreeItemViewModel? BuildTreeViewModel(string instanceId)
@@ -227,38 +225,93 @@ public sealed partial class MainWindow : Window
         return node;
     }
 
-    private void ApplyAssignmentsAndConflicts()
+    private void ApplyEnabledStates()
     {
+        // 首先重置所有状态
         foreach (var vm in _treeByInstanceId.Values)
         {
-            vm.ConflictMessage = null;
-            var rule = FindRuleForNode(vm);
-            if (rule is null)
+            vm.IsEnabled = false;
+            vm.IsInherited = false;
+        }
+
+        // 标记直接启用的节点
+        var enabledHubInstanceIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var enabledDeviceInstanceIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var enabled in _config.EnabledDevices.Where(e => e.Enabled))
+        {
+            if (_treeByInstanceId.TryGetValue(enabled.NodeInstanceId, out var vm))
             {
-                vm.AssignedRemoteName = "未分配";
+                if (vm.IsHub)
+                {
+                    enabledHubInstanceIds.Add(enabled.NodeInstanceId);
+                }
+                else if (vm.IsShareable)
+                {
+                    enabledDeviceInstanceIds.Add(enabled.NodeInstanceId);
+                }
             }
-            else
+        }
+
+        // 应用直接启用状态
+        foreach (var instanceId in enabledDeviceInstanceIds)
+        {
+            if (_treeByInstanceId.TryGetValue(instanceId, out var vm))
             {
-                var remote = _config.Remotes.FirstOrDefault(candidate => candidate.Id == rule.RemoteId);
-                vm.AssignedRemoteName = remote is null ? "规则远程已丢失" : $"-> {remote.DisplayTitle}";
+                vm.IsEnabled = true;
+            }
+        }
+
+        foreach (var instanceId in enabledHubInstanceIds)
+        {
+            if (_treeByInstanceId.TryGetValue(instanceId, out var vm))
+            {
+                vm.IsEnabled = true;
+            }
+        }
+
+        // 应用继承状态
+        foreach (var vm in _treeByInstanceId.Values)
+        {
+            if (vm.IsEnabled || vm.IsHub)
+            {
+                continue;
             }
 
-            if (_sessionState.ConflictsByInstanceId.TryGetValue(vm.InstanceId, out var conflict))
+            // 检查是否有启用的祖先 Hub
+            if (HasEnabledAncestorHub(vm, enabledHubInstanceIds))
             {
-                vm.ConflictMessage = conflict;
+                vm.IsInherited = true;
             }
         }
     }
 
-    private ShareRule? FindRuleForNode(UsbTreeItemViewModel vm)
+    private bool HasEnabledAncestorHub(UsbTreeItemViewModel vm, HashSet<string> enabledHubIds)
     {
-        return _config.ShareRules.FirstOrDefault(rule =>
-            rule.Enabled &&
-            rule.NodeType == vm.RuleNodeType &&
-            string.Equals(rule.NodeInstanceId, vm.InstanceId, StringComparison.OrdinalIgnoreCase));
+        var cursor = vm.ParentInstanceId;
+        while (!string.IsNullOrWhiteSpace(cursor))
+        {
+            if (enabledHubIds.Contains(cursor))
+            {
+                return true;
+            }
+
+            if (!_treeByInstanceId.TryGetValue(cursor, out var parent))
+            {
+                break;
+            }
+
+            cursor = parent.ParentInstanceId;
+        }
+
+        return false;
     }
 
-    private RemoteConfig? SelectedRemote => RemoteListView.SelectedItem as RemoteConfig;
+    private DeviceEnabled? GetEnabledDeviceForNode(UsbTreeItemViewModel vm)
+    {
+        return _config.EnabledDevices.FirstOrDefault(e =>
+            string.Equals(e.NodeInstanceId, vm.InstanceId, StringComparison.OrdinalIgnoreCase));
+    }
 
     private void SetStatus(string message, InfoBarSeverity severity)
     {
@@ -286,6 +339,12 @@ public sealed partial class MainWindow : Window
         if (!_isAdmin)
         {
             SetStatus("未获得管理员权限，无法开始分享。", InfoBarSeverity.Warning);
+            return;
+        }
+
+        if (!_config.Settings.SelectedRemoteId.HasValue)
+        {
+            SetStatus("请先选择一个远程服务器作为分享目标。", InfoBarSeverity.Warning);
             return;
         }
 
@@ -336,7 +395,47 @@ public sealed partial class MainWindow : Window
 
     private void RemoteListView_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        // Selection is consumed by edit/delete/test actions.
+        _selectedRemote = RemoteListView.SelectedItem as RemoteConfig;
+        UpdateSetAsTargetButtonState();
+    }
+
+    private void UpdateSetAsTargetButtonState()
+    {
+        if (_selectedRemote is null)
+        {
+            SetAsTargetButton.IsEnabled = false;
+            return;
+        }
+
+        // 如果已经选中了这个远程，禁用按钮
+        var isAlreadySelected = _config.Settings.SelectedRemoteId.HasValue &&
+                                _selectedRemote.Id == _config.Settings.SelectedRemoteId.Value;
+        SetAsTargetButton.IsEnabled = !isAlreadySelected;
+    }
+
+    private async void SetAsTargetButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedRemote is null)
+        {
+            SetStatus("请先选择一个远程服务器。", InfoBarSeverity.Warning);
+            return;
+        }
+
+        // 如果正在运行，需要先停止
+        if (_orchestrator.IsRunning)
+        {
+            SetStatus("请先停止分享后再更改分享目标。", InfoBarSeverity.Warning);
+            return;
+        }
+
+        _config.Settings.SelectedRemoteId = _selectedRemote.Id;
+        await PersistAndPropagateConfigurationAsync();
+
+        UpdateCurrentTargetDisplay();
+        RefreshRemoteList();
+        UpdateSetAsTargetButtonState();
+
+        SetStatus($"已将 {_selectedRemote.DisplayTitle} 设为分享目标。", InfoBarSeverity.Success);
     }
 
     private async void AddRemoteButton_Click(object sender, RoutedEventArgs e)
@@ -353,26 +452,24 @@ public sealed partial class MainWindow : Window
         await PersistAndPropagateConfigurationAsync();
 
         RefreshRemoteList();
-        RefreshRuleRemoteOptions();
-        ApplyAssignmentsAndConflicts();
+        ApplyEnabledStates();
     }
 
     private async void EditRemoteButton_Click(object sender, RoutedEventArgs e)
     {
-        var selected = SelectedRemote;
-        if (selected is null)
+        if (_selectedRemote is null)
         {
             SetStatus("请先选择一个远程。", InfoBarSeverity.Warning);
             return;
         }
 
-        var result = await ShowRemoteEditorDialogAsync(selected);
+        var result = await ShowRemoteEditorDialogAsync(_selectedRemote);
         if (result is null)
         {
             return;
         }
 
-        var index = _config.Remotes.FindIndex(remote => remote.Id == selected.Id);
+        var index = _config.Remotes.FindIndex(remote => remote.Id == _selectedRemote!.Id);
         if (index >= 0)
         {
             _config.Remotes[index] = result.Remote;
@@ -383,24 +480,35 @@ public sealed partial class MainWindow : Window
         await PersistAndPropagateConfigurationAsync();
 
         RefreshRemoteList();
-        RefreshRuleRemoteOptions();
-        ApplyAssignmentsAndConflicts();
+        ApplyEnabledStates();
     }
 
     private async void DeleteRemoteButton_Click(object sender, RoutedEventArgs e)
     {
-        var selected = SelectedRemote;
-        if (selected is null)
+        if (_selectedRemote is null)
         {
             SetStatus("请先选择要删除的远程。", InfoBarSeverity.Warning);
             return;
+        }
+
+        // 如果是当前选中的远程，需要先清除
+        if (_config.Settings.SelectedRemoteId.HasValue &&
+            _selectedRemote.Id == _config.Settings.SelectedRemoteId.Value)
+        {
+            if (_orchestrator.IsRunning)
+            {
+                SetStatus("无法删除当前正在使用的分享目标。请先停止分享。", InfoBarSeverity.Warning);
+                return;
+            }
+
+            _config.Settings.SelectedRemoteId = null;
         }
 
         var confirmDialog = new ContentDialog
         {
             XamlRoot = RootGrid.XamlRoot,
             Title = "删除远程",
-            Content = $"确认删除远程 “{selected.DisplayTitle}”？关联规则将一并删除。",
+            Content = $"确认删除远程 \"{_selectedRemote.DisplayTitle}\"？",
             PrimaryButtonText = "删除",
             CloseButtonText = "取消",
             DefaultButton = ContentDialogButton.Close,
@@ -412,23 +520,21 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        _config.Remotes.RemoveAll(remote => remote.Id == selected.Id);
-        _config.ShareRules.RemoveAll(rule => rule.RemoteId == selected.Id);
-        _config.SecretRefs.RemoveAll(reference => reference.RemoteId == selected.Id);
-        await _secretStore.DeleteSecretAsync(selected.Id, SecretKind.Ssh);
-        await _secretStore.DeleteSecretAsync(selected.Id, SecretKind.Sudo);
+        _config.Remotes.RemoveAll(remote => remote.Id == _selectedRemote.Id);
+        _config.SecretRefs.RemoveAll(reference => reference.RemoteId == _selectedRemote.Id);
+        await _secretStore.DeleteSecretAsync(_selectedRemote.Id, SecretKind.Ssh);
+        await _secretStore.DeleteSecretAsync(_selectedRemote.Id, SecretKind.Sudo);
         await PersistAndPropagateConfigurationAsync();
 
         RefreshRemoteList();
-        RefreshRuleRemoteOptions();
-        ApplyAssignmentsAndConflicts();
+        UpdateCurrentTargetDisplay();
+        ApplyEnabledStates();
         SetStatus("远程已删除。", InfoBarSeverity.Success);
     }
 
     private async void TestRemoteButton_Click(object sender, RoutedEventArgs e)
     {
-        var selected = SelectedRemote;
-        if (selected is null)
+        if (_selectedRemote is null)
         {
             SetStatus("请先选择一个远程。", InfoBarSeverity.Warning);
             return;
@@ -436,17 +542,17 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            var sshSecret = await _secretStore.GetSecretAsync(selected.Id, SecretKind.Ssh);
-            await using var session = new SshRemoteSession(selected);
+            var sshSecret = await _secretStore.GetSecretAsync(_selectedRemote.Id, SecretKind.Ssh);
+            await using var session = new SshRemoteSession(_selectedRemote);
             await session.ConnectAsync(sshSecret);
             var probe = await session.ProbeAsync();
             if (probe.Success && probe.Output.Contains("READY", StringComparison.OrdinalIgnoreCase))
             {
-                SetStatus($"远程 {selected.DisplayTitle} 连接成功，usbip/sudo 可用。", InfoBarSeverity.Success);
+                SetStatus($"远程 {_selectedRemote.DisplayTitle} 连接成功，usbip/sudo 可用。", InfoBarSeverity.Success);
             }
             else
             {
-                SetStatus($"远程 {selected.DisplayTitle} 可连接，但缺少 usbip 或 sudo。{probe.Output} {probe.Error}".Trim(), InfoBarSeverity.Warning);
+                SetStatus($"远程 {_selectedRemote.DisplayTitle} 可连接，但缺少 usbip 或 sudo。{probe.Output} {probe.Error}".Trim(), InfoBarSeverity.Warning);
             }
         }
         catch (Exception ex)
@@ -455,57 +561,39 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private async void SaveRuleButton_Click(object sender, RoutedEventArgs e)
+    private async void EnableDeviceCheckBox_CheckedChanged(object sender, RoutedEventArgs e)
     {
         if (_selectedNode is null)
         {
-            SetStatus("请先选择一个树节点。", InfoBarSeverity.Warning);
             return;
         }
 
-        if (!_selectedNode.CanAssign)
+        if (!_selectedNode.CanEnable)
         {
-            SetStatus("该节点不可分配分享规则。", InfoBarSeverity.Warning);
+            SetStatus("该节点不可启用分享。", InfoBarSeverity.Warning);
             return;
         }
 
-        Guid? selectedRemoteId = RuleRemoteComboBox.SelectedValue is Guid value ? value : null;
-        _config.ShareRules.RemoveAll(rule =>
-            rule.NodeType == _selectedNode.RuleNodeType &&
-            string.Equals(rule.NodeInstanceId, _selectedNode.InstanceId, StringComparison.OrdinalIgnoreCase));
+        var isChecked = EnableDeviceCheckBox.IsChecked ?? false;
 
-        if (selectedRemoteId.HasValue)
+        // 移除现有的启用记录
+        _config.EnabledDevices.RemoveAll(e =>
+            string.Equals(e.NodeInstanceId, _selectedNode!.InstanceId, StringComparison.OrdinalIgnoreCase));
+
+        // 如果勾选，添加启用记录
+        if (isChecked)
         {
-            _config.ShareRules.Add(new ShareRule
+            _config.EnabledDevices.Add(new DeviceEnabled
             {
-                NodeType = _selectedNode.RuleNodeType,
                 NodeInstanceId = _selectedNode.InstanceId,
-                RemoteId = selectedRemoteId.Value,
                 Enabled = true,
             });
         }
 
         await PersistAndPropagateConfigurationAsync();
-        ApplyAssignmentsAndConflicts();
-        SetStatus("规则已保存。", InfoBarSeverity.Success);
-    }
+        ApplyEnabledStates();
 
-    private async void ClearRuleButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (_selectedNode is null)
-        {
-            SetStatus("请先选择一个树节点。", InfoBarSeverity.Warning);
-            return;
-        }
-
-        _config.ShareRules.RemoveAll(rule =>
-            rule.NodeType == _selectedNode.RuleNodeType &&
-            string.Equals(rule.NodeInstanceId, _selectedNode.InstanceId, StringComparison.OrdinalIgnoreCase));
-
-        await PersistAndPropagateConfigurationAsync();
-        RuleRemoteComboBox.SelectedValue = null;
-        ApplyAssignmentsAndConflicts();
-        SetStatus("规则已清除。", InfoBarSeverity.Informational);
+        SetStatus(isChecked ? "设备已启用分享。" : "设备已禁用分享。", InfoBarSeverity.Success);
     }
 
     private void UsbTreeView_SelectionChanged(TreeView sender, TreeViewSelectionChangedEventArgs args)
@@ -514,14 +602,17 @@ public sealed partial class MainWindow : Window
         {
             _selectedNode = null;
             SelectedNodeTextBlock.Text = "选中节点: (无)";
-            RuleRemoteComboBox.SelectedValue = null;
+            EnableDeviceCheckBox.IsEnabled = false;
+            EnableDeviceCheckBox.IsChecked = false;
             return;
         }
 
         _selectedNode = vm;
         SelectedNodeTextBlock.Text = $"选中节点: {vm.Title}";
-        var rule = FindRuleForNode(vm);
-        RuleRemoteComboBox.SelectedValue = rule?.RemoteId;
+
+        var enabledDevice = GetEnabledDeviceForNode(vm);
+        EnableDeviceCheckBox.IsEnabled = vm.CanEnable;
+        EnableDeviceCheckBox.IsChecked = enabledDevice?.Enabled ?? false;
     }
 
     private async void PollIntervalNumberBox_ValueChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
@@ -541,7 +632,6 @@ public sealed partial class MainWindow : Window
         DispatcherQueue?.TryEnqueue(() =>
         {
             _sessionState = state;
-            ApplyAssignmentsAndConflicts();
 
             if (state.LastErrorsByKey.Count > 0)
             {
