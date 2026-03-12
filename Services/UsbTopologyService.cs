@@ -163,7 +163,8 @@ public sealed class UsbTopologyService : IUsbTopologyService
                               $rows | ConvertTo-Json -Depth 4 -Compress
                               """;
 
-        var command = $"-NoLogo -NoProfile -ExecutionPolicy Bypass -Command \"{script.Replace("\"", "\\\"").Replace(Environment.NewLine, " ")}\"";
+        var encodedScript = Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(script));
+        var command = $"-NoLogo -NoProfile -ExecutionPolicy Bypass -EncodedCommand {encodedScript}";
         var result = await _processRunner
             .RunAsync("powershell", command, timeout: TimeSpan.FromSeconds(90), cancellationToken: cancellationToken)
             .ConfigureAwait(false);
