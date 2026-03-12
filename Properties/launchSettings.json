@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "USBShare (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "USBShare (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
