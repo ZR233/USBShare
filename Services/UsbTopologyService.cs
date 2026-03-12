@@ -23,6 +23,7 @@ public sealed class UsbTopologyService : IUsbTopologyService
         var nodes = await BuildPnpTreeAsync(cancellationToken).ConfigureAwait(false);
         await MergeUsbipdDataAsync(nodes, cancellationToken).ConfigureAwait(false);
         RebuildChildren(nodes);
+        PromoteNodesWithChildrenToHub(nodes);
 
         return new UsbTopologySnapshot
         {
@@ -50,14 +51,7 @@ public sealed class UsbTopologyService : IUsbTopologyService
         }
 
         RebuildChildren(nodes);
-
-        foreach (var node in nodes.Values)
-        {
-            if (!node.IsHub && node.Children.Count > 0)
-            {
-                node.IsHub = LooksLikeHub(node.InstanceId, node.DisplayName, node.DeviceClass);
-            }
-        }
+        PromoteNodesWithChildrenToHub(nodes);
 
         return nodes;
     }
@@ -202,6 +196,17 @@ public sealed class UsbTopologyService : IUsbTopologyService
                 .OrderBy(childId => nodes.TryGetValue(childId, out var child) ? child.DisplayName : childId,
                     StringComparer.CurrentCultureIgnoreCase)
                 .ToList();
+        }
+    }
+
+    private static void PromoteNodesWithChildrenToHub(Dictionary<string, UsbTopologyNode> nodes)
+    {
+        foreach (var node in nodes.Values)
+        {
+            if (node.Children.Count > 0)
+            {
+                node.IsHub = true;
+            }
         }
     }
 

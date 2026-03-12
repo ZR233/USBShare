@@ -50,7 +50,8 @@ public sealed class PnpDeviceNode
         FriendlyName?.Contains("hub", StringComparison.OrdinalIgnoreCase) == true ||
         FriendlyName?.Contains("集线器", StringComparison.OrdinalIgnoreCase) == true ||
         FriendlyName?.Contains("router", StringComparison.OrdinalIgnoreCase) == true ||
-        FriendlyName?.Contains("路由器", StringComparison.OrdinalIgnoreCase) == true;
+        FriendlyName?.Contains("路由器", StringComparison.OrdinalIgnoreCase) == true ||
+        Children.Count > 0;
 
     /// <summary>
     /// 判断此设备是否为 USB 根设备（没有父设备的 USB 设备）

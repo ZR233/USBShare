@@ -97,7 +97,7 @@ public sealed class UsbTopologyServiceTests
     }
 
     [Fact]
-    public async Task BuildSnapshotAsync_ShouldStartTreeFromHub_WhenNonHubParentExists()
+    public async Task BuildSnapshotAsync_NodeWithChildren_ShouldBeHub()
     {
         var pnpRoots = new List<PnpDeviceNode>
         {
@@ -132,8 +132,10 @@ public sealed class UsbTopologyServiceTests
         }
 
         Assert.Single(snapshot.RootNodes);
-        Assert.Equal(@"USB\ROOT_HUB30\REAL_HUB", snapshot.RootNodes[0].InstanceId);
+        Assert.Equal(@"USB\VID_DEAD&PID_BEEF\NON_HUB_ROOT", snapshot.RootNodes[0].InstanceId);
         Assert.True(snapshot.RootNodes[0].IsHub);
+        Assert.True(snapshot.Nodes[@"USB\VID_DEAD&PID_BEEF\NON_HUB_ROOT"].IsHub);
+        Assert.True(snapshot.Nodes[@"USB\ROOT_HUB30\REAL_HUB"].IsHub);
     }
 
     private void LogNode(UsbTopologySnapshot snapshot, UsbTopologyNode node, int level)
