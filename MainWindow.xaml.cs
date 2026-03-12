@@ -573,6 +573,7 @@ public sealed partial class MainWindow : Window
         {
             Header = "私钥路径(密钥认证)",
             Text = existingRemote?.KeyPath ?? string.Empty,
+            PlaceholderText = "留空时自动查找 ~/.ssh 下的默认私钥",
         };
         var tunnelPortBox = new NumberBox
         {
@@ -583,6 +584,12 @@ public sealed partial class MainWindow : Window
         };
         var sshPasswordBox = new PasswordBox { Header = "SSH密码/密钥口令(留空=不修改)" };
         var sudoPasswordBox = new PasswordBox { Header = "sudo密码(留空=不修改)" };
+        var validationTextBlock = new TextBlock
+        {
+            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorCriticalBrush"],
+            TextWrapping = TextWrapping.WrapWholeWords,
+            Visibility = Visibility.Collapsed,
+        };
 
         var panel = new StackPanel
         {
@@ -598,17 +605,62 @@ public sealed partial class MainWindow : Window
                 tunnelPortBox,
                 sshPasswordBox,
                 sudoPasswordBox,
+                validationTextBlock,
             },
         };
 
+        void SetValidationMessage(string? message)
+        {
+            validationTextBlock.Text = message ?? string.Empty;
+            validationTextBlock.Visibility = string.IsNullOrWhiteSpace(message) ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        string? ValidateInputs()
+        {
+            var authType = authBox.SelectedItem is AuthType selectedAuthType ? selectedAuthType : AuthType.PrivateKey;
+            if (string.IsNullOrWhiteSpace(hostBox.Text) || string.IsNullOrWhiteSpace(userBox.Text))
+            {
+                return "Host 和 用户名不能为空。";
+            }
+
+            if (double.IsNaN(portBox.Value) || portBox.Value < 1 || portBox.Value > 65535)
+            {
+                return "SSH 端口必须在 1 到 65535 之间。";
+            }
+
+            if (double.IsNaN(tunnelPortBox.Value) || tunnelPortBox.Value < 1 || tunnelPortBox.Value > 65535)
+            {
+                return "远端映射端口必须在 1 到 65535 之间。";
+            }
+
+            if (authType == AuthType.Password &&
+                string.IsNullOrWhiteSpace(sshPasswordBox.Password) &&
+                existingRemote is null)
+            {
+                return "密码认证在新建时必须提供 SSH 密码。";
+            }
+
+            return null;
+        }
+
         void UpdateAuthUi()
         {
-            var auth = (AuthType)authBox.SelectedItem;
+            var auth = authBox.SelectedItem is AuthType selectedAuthType ? selectedAuthType : AuthType.PrivateKey;
             keyPathBox.IsEnabled = auth == AuthType.PrivateKey;
             keyPathBox.Visibility = auth == AuthType.PrivateKey ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        authBox.SelectionChanged += (_, _) => UpdateAuthUi();
+        authBox.SelectionChanged += (_, _) =>
+        {
+            UpdateAuthUi();
+            SetValidationMessage(null);
+        };
+        hostBox.TextChanged += (_, _) => SetValidationMessage(null);
+        userBox.TextChanged += (_, _) => SetValidationMessage(null);
+        keyPathBox.TextChanged += (_, _) => SetValidationMessage(null);
+        sshPasswordBox.PasswordChanged += (_, _) => SetValidationMessage(null);
+        portBox.ValueChanged += (_, _) => SetValidationMessage(null);
+        tunnelPortBox.ValueChanged += (_, _) => SetValidationMessage(null);
         UpdateAuthUi();
 
         var dialog = new ContentDialog
@@ -620,6 +672,18 @@ public sealed partial class MainWindow : Window
             CloseButtonText = "取消",
             DefaultButton = ContentDialogButton.Primary,
         };
+        dialog.PrimaryButtonClick += (_, args) =>
+        {
+            var validationMessage = ValidateInputs();
+            if (validationMessage is null)
+            {
+                SetValidationMessage(null);
+                return;
+            }
+
+            args.Cancel = true;
+            SetValidationMessage(validationMessage);
+        };
 
         var dialogResult = await dialog.ShowAsync();
         if (dialogResult != ContentDialogResult.Primary)
@@ -627,7 +691,7 @@ public sealed partial class MainWindow : Window
             return null;
         }
 
-        var authType = (AuthType)authBox.SelectedItem;
+        var authType = authBox.SelectedItem is AuthType selectedAuthType ? selectedAuthType : AuthType.PrivateKey;
         var remote = new RemoteConfig
         {
             Id = existingRemote?.Id ?? Guid.NewGuid(),
@@ -636,29 +700,9 @@ public sealed partial class MainWindow : Window
             Port = (int)Math.Round(portBox.Value),
             User = userBox.Text.Trim(),
             AuthType = authType,
-            KeyPath = string.IsNullOrWhiteSpace(keyPathBox.Text) ? null : keyPathBox.Text.Trim(),
+            KeyPath = authType == AuthType.PrivateKey && !string.IsNullOrWhiteSpace(keyPathBox.Text) ? keyPathBox.Text.Trim() : null,
             TunnelPort = (int)Math.Round(tunnelPortBox.Value),
         };
-
-        if (string.IsNullOrWhiteSpace(remote.Host) || string.IsNullOrWhiteSpace(remote.User))
-        {
-            SetStatus("Host 和 用户名不能为空。", InfoBarSeverity.Warning);
-            return null;
-        }
-
-        if (authType == AuthType.PrivateKey && string.IsNullOrWhiteSpace(remote.KeyPath))
-        {
-            SetStatus("密钥认证需要填写私钥路径。", InfoBarSeverity.Warning);
-            return null;
-        }
-
-        if (authType == AuthType.Password &&
-            string.IsNullOrWhiteSpace(sshPasswordBox.Password) &&
-            existingRemote is null)
-        {
-            SetStatus("密码认证在新建时必须提供 SSH 密码。", InfoBarSeverity.Warning);
-            return null;
-        }
 
         return new RemoteEditorResult
         {

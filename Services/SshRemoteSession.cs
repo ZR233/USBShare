@@ -210,20 +210,15 @@ public sealed class SshRemoteSession : ISshRemoteSession
             }
             case AuthType.PrivateKey:
             {
-                if (string.IsNullOrWhiteSpace(remote.KeyPath))
+                var resolvedKeyPath = ResolvePrivateKeyPath(remote.KeyPath);
+                if (resolvedKeyPath is null)
                 {
-                    throw new InvalidOperationException("Private key path is required for key authentication.");
-                }
-
-                var expandedKeyPath = Environment.ExpandEnvironmentVariables(remote.KeyPath);
-                if (!File.Exists(expandedKeyPath))
-                {
-                    throw new FileNotFoundException($"Private key does not exist: {expandedKeyPath}");
+                    throw new FileNotFoundException("Private key does not exist in the configured path or default SSH locations.");
                 }
 
                 var keyFile = string.IsNullOrWhiteSpace(sshSecret)
-                    ? new PrivateKeyFile(expandedKeyPath)
-                    : new PrivateKeyFile(expandedKeyPath, sshSecret);
+                    ? new PrivateKeyFile(resolvedKeyPath)
+                    : new PrivateKeyFile(resolvedKeyPath, sshSecret);
 
                 authMethod = new PrivateKeyAuthenticationMethod(remote.User, keyFile);
                 break;
@@ -233,6 +228,52 @@ public sealed class SshRemoteSession : ISshRemoteSession
         }
 
         return new ConnectionInfo(remote.Host, remote.Port, remote.User, authMethod);
+    }
+
+    private static string? ResolvePrivateKeyPath(string? configuredKeyPath)
+    {
+        if (!string.IsNullOrWhiteSpace(configuredKeyPath))
+        {
+            var expandedKeyPath = ExpandPath(configuredKeyPath);
+            if (!File.Exists(expandedKeyPath))
+            {
+                throw new FileNotFoundException($"Private key does not exist: {expandedKeyPath}");
+            }
+
+            return expandedKeyPath;
+        }
+
+        return GetDefaultPrivateKeyPaths().FirstOrDefault(File.Exists);
+    }
+
+    private static IEnumerable<string> GetDefaultPrivateKeyPaths()
+    {
+        var homeDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (string.IsNullOrWhiteSpace(homeDirectory))
+        {
+            yield break;
+        }
+
+        var sshDirectory = Path.Combine(homeDirectory, ".ssh");
+        yield return Path.Combine(sshDirectory, "id_ed25519");
+        yield return Path.Combine(sshDirectory, "id_ecdsa");
+        yield return Path.Combine(sshDirectory, "id_rsa");
+        yield return Path.Combine(sshDirectory, "id_dsa");
+    }
+
+    private static string ExpandPath(string path)
+    {
+        var expandedPath = Environment.ExpandEnvironmentVariables(path.Trim());
+        if (expandedPath.StartsWith("~/", StringComparison.Ordinal) || expandedPath.StartsWith("~\\", StringComparison.Ordinal))
+        {
+            var homeDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (!string.IsNullOrWhiteSpace(homeDirectory))
+            {
+                expandedPath = Path.Combine(homeDirectory, expandedPath[2..]);
+            }
+        }
+
+        return Path.GetFullPath(expandedPath);
     }
 
     private static string QuoteForSingleShell(string value)
