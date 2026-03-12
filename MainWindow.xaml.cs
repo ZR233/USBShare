@@ -563,6 +563,8 @@ public sealed partial class MainWindow : Window
 
     private async void EnableDeviceCheckBox_CheckedChanged(object sender, RoutedEventArgs e)
     {
+        // 此方法已废弃，现在使用 DeviceCheckBox_Click 进行内联交互
+        // 保留此方法以防向后兼容
         if (_selectedNode is null)
         {
             return;
@@ -574,26 +576,10 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        var isChecked = EnableDeviceCheckBox.IsChecked ?? false;
-
-        // 移除现有的启用记录
-        _config.EnabledDevices.RemoveAll(e =>
-            string.Equals(e.NodeInstanceId, _selectedNode!.InstanceId, StringComparison.OrdinalIgnoreCase));
-
-        // 如果勾选，添加启用记录
-        if (isChecked)
-        {
-            _config.EnabledDevices.Add(new DeviceEnabled
-            {
-                NodeInstanceId = _selectedNode.InstanceId,
-                Enabled = true,
-            });
-        }
-
-        await PersistAndPropagateConfigurationAsync();
-        ApplyEnabledStates();
-
-        SetStatus(isChecked ? "设备已启用分享。" : "设备已禁用分享。", InfoBarSeverity.Success);
+        // 切换设备状态
+        var newEnabled = !_selectedNode.IsEnabled;
+        await ToggleDeviceEnabledAsync(_selectedNode.InstanceId, newEnabled);
+        SetStatus(newEnabled ? "设备已启用分享。" : "设备已禁用分享。", InfoBarSeverity.Success);
     }
 
     private void UsbTreeView_SelectionChanged(TreeView sender, TreeViewSelectionChangedEventArgs args)
@@ -601,18 +587,10 @@ public sealed partial class MainWindow : Window
         if (sender.SelectedNode?.Content is not UsbTreeItemViewModel vm)
         {
             _selectedNode = null;
-            SelectedNodeTextBlock.Text = "选中节点: (无)";
-            EnableDeviceCheckBox.IsEnabled = false;
-            EnableDeviceCheckBox.IsChecked = false;
             return;
         }
 
         _selectedNode = vm;
-        SelectedNodeTextBlock.Text = $"选中节点: {vm.Title}";
-
-        var enabledDevice = GetEnabledDeviceForNode(vm);
-        EnableDeviceCheckBox.IsEnabled = vm.CanEnable;
-        EnableDeviceCheckBox.IsChecked = enabledDevice?.Enabled ?? false;
     }
 
     private async void PollIntervalNumberBox_ValueChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
@@ -632,6 +610,7 @@ public sealed partial class MainWindow : Window
         DispatcherQueue?.TryEnqueue(() =>
         {
             _sessionState = state;
+            UpdateRuntimeStates();
 
             if (state.LastErrorsByKey.Count > 0)
             {
@@ -639,6 +618,57 @@ public sealed partial class MainWindow : Window
                 SetStatus($"运行告警: {latestError.Value}", InfoBarSeverity.Warning);
             }
         });
+    }
+
+    /// <summary>
+    /// 更新运行时状态（bound/attached）到视图模型。
+    /// </summary>
+    private void UpdateRuntimeStates()
+    {
+        var boundBusIds = _sessionState.BoundBusIds;
+        var attachedBusIds = _sessionState.AttachedBusIds;
+
+        foreach (var vm in _treeByInstanceId.Values)
+        {
+            vm.IsBound = !string.IsNullOrWhiteSpace(vm.BusId) &&
+                         boundBusIds.Contains(vm.BusId);
+            vm.IsAttached = !string.IsNullOrWhiteSpace(vm.BusId) &&
+                            attachedBusIds.Contains(vm.BusId);
+        }
+    }
+
+    /// <summary>
+    /// 设备复选框点击事件处理（内联交互）。
+    /// </summary>
+    private async void DeviceCheckBox_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is CheckBox checkBox && checkBox.Tag is string instanceId)
+        {
+            await ToggleDeviceEnabledAsync(instanceId, checkBox.IsChecked ?? false);
+        }
+    }
+
+    /// <summary>
+    /// 切换设备启用状态。
+    /// </summary>
+    private async Task ToggleDeviceEnabledAsync(string instanceId, bool enabled)
+    {
+        // 移除旧记录
+        _config.EnabledDevices.RemoveAll(e =>
+            string.Equals(e.NodeInstanceId, instanceId, StringComparison.OrdinalIgnoreCase));
+
+        // 添加新记录
+        if (enabled)
+        {
+            _config.EnabledDevices.Add(new DeviceEnabled
+            {
+                NodeInstanceId = instanceId,
+                Enabled = true,
+            });
+        }
+
+        await PersistAndPropagateConfigurationAsync();
+        ApplyEnabledStates();
     }
 
     private async Task<RemoteEditorResult?> ShowRemoteEditorDialogAsync(RemoteConfig? existingRemote)
@@ -840,5 +870,5 @@ public sealed partial class MainWindow : Window
         public required RemoteConfig Remote { get; init; }
         public string? SshSecret { get; init; }
         public string? SudoSecret { get; init; }
-    }
+}
 }

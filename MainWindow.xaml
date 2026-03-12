@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:models="using:USBShare.Models"
     xmlns:viewModels="using:USBShare.ViewModels"
+    xmlns:local="using:USBShare"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
@@ -94,7 +95,7 @@
                 </Grid>
             </Border>
 
-            <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto,Auto" RowSpacing="8">
+            <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto" RowSpacing="8">
                 <TextBlock Text="USB 设备分享" FontSize="18" FontWeight="SemiBold" />
 
                 <Border Grid.Row="1"
@@ -108,49 +109,58 @@
                               SelectionChanged="UsbTreeView_SelectionChanged">
                         <TreeView.ItemTemplate>
                             <DataTemplate>
-                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Padding="4">
-                                    <FontIcon Glyph="{Binding Content.Glyph}" VerticalAlignment="Top" />
-                                    <StackPanel Grid.Column="1" Spacing="1">
-                                        <TextBlock Text="{Binding Content.Title}" Opacity="{Binding Content.TitleOpacity}" />
-                                        <TextBlock Text="{Binding Content.Subtitle}" FontSize="12" Opacity="0.72" TextWrapping="WrapWholeWords" />
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Padding="6"
+                                      Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                      CornerRadius="4">
+                                    <!-- 设备图标 -->
+                                    <FontIcon Glyph="{Binding Content.Glyph}"
+                                              VerticalAlignment="Center" />
+
+                                    <!-- 设备信息 -->
+                                    <StackPanel Grid.Column="1" Spacing="2">
+                                        <TextBlock Text="{Binding Content.Title}"
+                                                   FontWeight="SemiBold"
+                                                   Opacity="{Binding Content.TitleOpacity}" />
+                                        <TextBlock Text="{Binding Content.Subtitle}"
+                                                   FontSize="11"
+                                                   Opacity="0.7" />
+
+                                        <!-- 状态徽章（仅在有非默认状态时显示） -->
+                                        <Border Background="{Binding Content.StatusBadgeBrush, Mode=OneWay}"
+                                                Padding="4,2"
+                                                CornerRadius="2"
+                                                HorizontalAlignment="Left"
+                                                Visibility="{Binding Content.ShowStatusBadge, Mode=OneWay}">
+                                            <TextBlock Text="{Binding Content.StatusText, Mode=OneWay}"
+                                                       FontSize="10"
+                                                       Foreground="White" />
+                                        </Border>
                                     </StackPanel>
-                                    <!-- 启用状态图标 -->
-                                    <FontIcon Grid.Column="2"
-                                              Glyph="{Binding Content.StatusGlyph}"
-                                              Foreground="{Binding Content.StatusBrush, Mode=OneWay}"
-                                              FontSize="14"
-                                              VerticalAlignment="Center"
-                                              Visibility="{Binding Content.HasStatus, Mode=OneWay}" />
+
+                                    <!-- 内联交互区域 -->
+                                    <Grid Grid.Column="2">
+                                        <!-- 状态图标（不可交互或继承状态时显示） -->
+                                        <FontIcon Glyph="{Binding Content.StatusIcon, Mode=OneWay}"
+                                                  Foreground="{Binding Content.StatusBrushNew, Mode=OneWay}"
+                                                  FontSize="16"
+                                                  VerticalAlignment="Center"
+                                                  Visibility="{Binding Content.HasStatusIcon, Mode=OneWay}" />
+
+                                        <!-- 直接交互的 CheckBox (仅当可交互时显示) -->
+                                        <CheckBox IsChecked="{Binding Content.IsEnabled, Mode=TwoWay}"
+                                                  Click="DeviceCheckBox_Click"
+                                                  Tag="{Binding Content.InstanceId, Mode=OneWay}"
+                                                  MinWidth="0"
+                                                  Visibility="{Binding Content.ShowCheckBox, Mode=OneWay}" />
+                                    </Grid>
                                 </Grid>
                             </DataTemplate>
                         </TreeView.ItemTemplate>
                     </TreeView>
                 </Border>
 
-                <Border Grid.Row="2"
-                        CornerRadius="8"
-                        BorderThickness="1"
-                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        Padding="12">
-                    <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
-                        <TextBlock x:Name="SelectedNodeTextBlock" Text="选中节点: (无)" />
-                        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
-                            <CheckBox x:Name="EnableDeviceCheckBox"
-                                      Content="启用分享"
-                                      Checked="EnableDeviceCheckBox_CheckedChanged"
-                                      Unchecked="EnableDeviceCheckBox_CheckedChanged"
-                                      IsEnabled="False" />
-                        </StackPanel>
-                        <TextBlock Grid.Row="2"
-                                   Text="提示: 勾选 Hub 后，其下的所有可分享设备将自动继承启用状态。灰色设备不可直接分享。"
-                                   Opacity="0.78"
-                                   TextWrapping="WrapWholeWords" />
-                    </Grid>
-                </Border>
-
                 <InfoBar x:Name="StatusInfoBar"
-                         Grid.Row="3"
+                         Grid.Row="2"
                          IsOpen="False"
                          IsClosable="False"
                          Severity="Informational"

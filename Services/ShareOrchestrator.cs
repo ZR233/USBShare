@@ -229,6 +229,15 @@ public sealed class ShareOrchestrator : IShareOrchestrator
         await CleanupDetachedDevicesAsync(enabledResult.EnabledBusIds.Keys, cancellationToken).ConfigureAwait(false);
         await EnsureEnabledDevicesAsync(enabledResult.EnabledBusIds.Keys, cancellationToken).ConfigureAwait(false);
         await CleanupStaleBindingsAsync(enabledResult.EnabledBusIds.Keys, cancellationToken).ConfigureAwait(false);
+
+        // 同步绑定状态到 session state
+        SetState(sessionState =>
+        {
+            sessionState.BoundBusIds.Clear();
+            sessionState.BoundBusIds.UnionWith(_boundBySession);
+            sessionState.AttachedBusIds.Clear();
+            sessionState.AttachedBusIds.UnionWith(_attachedBusIds);
+        });
     }
 
     private async Task EnsureSessionAsync(RemoteConfig remote, CancellationToken cancellationToken)
@@ -436,6 +445,8 @@ public sealed class ShareOrchestrator : IShareOrchestrator
             LastUpdated = source.LastUpdated,
             ConflictsByInstanceId = new Dictionary<string, string>(source.ConflictsByInstanceId, StringComparer.OrdinalIgnoreCase),
             LastErrorsByKey = new Dictionary<string, string>(source.LastErrorsByKey, StringComparer.OrdinalIgnoreCase),
+            BoundBusIds = new HashSet<string>(source.BoundBusIds, StringComparer.OrdinalIgnoreCase),
+            AttachedBusIds = new HashSet<string>(source.AttachedBusIds, StringComparer.OrdinalIgnoreCase),
         };
     }
 
