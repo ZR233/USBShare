@@ -29,7 +29,7 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
 
         _usbipdService = new UsbipdService(_processRunner);
-        _usbTopologyService = new UsbTopologyService(_processRunner);
+        _usbTopologyService = new UsbTopologyService(new PnpDeviceService(), _usbipdService);
         _orchestrator = new ShareOrchestrator(
             _usbipdService,
             _usbTopologyService,
@@ -65,7 +65,7 @@ public sealed partial class MainWindow : Window
                 return;
             }
 
-            AdminHintTextBlock.Text = "当前未获得管理员权限，无法执行 usbipd bind/unbind。请点击"管理员重启"。";
+            AdminHintTextBlock.Text = "当前未获得管理员权限，无法执行 usbipd bind/unbind。请点击“管理员重启”。";
 #endif
             StartShareButton.IsEnabled = false;
         }
@@ -124,8 +124,7 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            var state = await _usbipdService.GetStateAsync();
-            _topology = await _usbTopologyService.BuildSnapshotAsync(state);
+            _topology = await _usbTopologyService.BuildSnapshotAsync();
             BuildTree();
             SetStatus($"设备拓扑刷新完成，共 {_treeByInstanceId.Count} 个节点。", InfoBarSeverity.Success);
         }
@@ -174,6 +173,7 @@ public sealed partial class MainWindow : Window
             IsShareable = node.IsShareable,
             BusId = node.BusId,
         };
+        viewModel.UpdateShareStatus();
 
         _treeByInstanceId[viewModel.InstanceId] = viewModel;
 
@@ -283,6 +283,11 @@ public sealed partial class MainWindow : Window
             {
                 vm.IsInherited = true;
             }
+        }
+
+        foreach (var vm in _treeByInstanceId.Values)
+        {
+            vm.UpdateShareStatus();
         }
     }
 

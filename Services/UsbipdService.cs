@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using USBShare.Models;
 
 namespace USBShare.Services;
@@ -9,6 +10,7 @@ public sealed record UsbipCommandResult(bool Success, bool PermissionDenied, str
 public interface IUsbipdService
 {
     Task<UsbipStateSnapshot> GetStateAsync(CancellationToken cancellationToken = default);
+    Task<UsbipListResult> GetListAsync(CancellationToken cancellationToken = default);
     Task<UsbipBindResult> EnsureBoundAsync(string busId, CancellationToken cancellationToken = default);
     Task<UsbipCommandResult> UnbindAsync(string busId, CancellationToken cancellationToken = default);
 }
@@ -19,6 +21,9 @@ public sealed class UsbipdService : IUsbipdService
     {
         PropertyNameCaseInsensitive = true,
     };
+    private static readonly Regex ListRowRegex = new(
+        @"^\s*(?<busid>\S+)\s+(?<vidpid>[0-9A-Fa-f]{4}:[0-9A-Fa-f]{4})\s+(?<tail>.+?)\s*$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private readonly IProcessRunner _processRunner;
 
@@ -40,6 +45,20 @@ public sealed class UsbipdService : IUsbipdService
 
         var snapshot = JsonSerializer.Deserialize<UsbipStateSnapshot>(result.StandardOutput, JsonOptions);
         return snapshot ?? new UsbipStateSnapshot();
+    }
+
+    public async Task<UsbipListResult> GetListAsync(CancellationToken cancellationToken = default)
+    {
+        var result = await _processRunner
+            .RunAsync("usbipd", "list", timeout: TimeSpan.FromSeconds(20), cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!result.IsSuccess)
+        {
+            throw new InvalidOperationException($"usbipd list failed: {MergeOutput(result)}");
+        }
+
+        return ParseUsbipdListOutput(result.StandardOutput);
     }
 
     public async Task<UsbipBindResult> EnsureBoundAsync(string busId, CancellationToken cancellationToken = default)
@@ -144,5 +163,96 @@ public sealed class UsbipdService : IUsbipdService
             || text.Contains("No devices", StringComparison.OrdinalIgnoreCase)
             || text.Contains("未共享", StringComparison.OrdinalIgnoreCase)
             || text.Contains("找不到", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static UsbipListResult ParseUsbipdListOutput(string output)
+    {
+        var result = new UsbipListResult();
+        if (string.IsNullOrWhiteSpace(output))
+        {
+            return result;
+        }
+
+        var lines = output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+        foreach (var raw in lines)
+        {
+            var line = raw.TrimEnd();
+            if (string.IsNullOrWhiteSpace(line) || IsListHeaderLine(line))
+            {
+                continue;
+            }
+
+            if (TryParseDeviceLine(line, out var device))
+            {
+                result.Devices.Add(device);
+            }
+        }
+
+        return result;
+    }
+
+    private static bool TryParseDeviceLine(string line, out UsbipListDevice device)
+    {
+        device = new UsbipListDevice();
+        var match = ListRowRegex.Match(line);
+        if (!match.Success)
+        {
+            return false;
+        }
+
+        var busId = match.Groups["busid"].Value.Trim();
+        if (string.IsNullOrWhiteSpace(busId) || !busId.Contains('-', StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var tail = match.Groups["tail"].Value.Trim();
+        if (string.IsNullOrWhiteSpace(tail))
+        {
+            return false;
+        }
+
+        var parts = Regex.Split(tail, @"\s{2,}")
+            .Where(part => !string.IsNullOrWhiteSpace(part))
+            .ToArray();
+
+        string description;
+        string state;
+        if (parts.Length >= 2)
+        {
+            state = parts[^1].Trim();
+            description = string.Join(" ", parts[..^1]).Trim();
+        }
+        else
+        {
+            description = tail;
+            state = string.Empty;
+        }
+
+        device = new UsbipListDevice
+        {
+            BusId = busId,
+            Description = description,
+            State = state,
+            InstanceId = string.Empty,
+        };
+
+        return true;
+    }
+
+    private static bool IsListHeaderLine(string line)
+    {
+        var trimmed = line.Trim();
+        if (trimmed.StartsWith("Connected", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("Persisted", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("BUSID", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("Devices", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("Shared", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("State", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return trimmed.All(ch => ch == '-' || char.IsWhiteSpace(ch));
     }
 }

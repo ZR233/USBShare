@@ -215,8 +215,7 @@ public sealed class ShareOrchestrator : IShareOrchestrator
             return;
         }
 
-        var state = await _usbipdService.GetStateAsync(cancellationToken).ConfigureAwait(false);
-        var topology = await _usbTopologyService.BuildSnapshotAsync(state, cancellationToken).ConfigureAwait(false);
+        var topology = await _usbTopologyService.BuildSnapshotAsync(cancellationToken).ConfigureAwait(false);
         var enabledResult = _deviceEnabledResolver.Resolve(topology, config.EnabledDevices);
 
         // 清空冲突（新的简化模型没有冲突）

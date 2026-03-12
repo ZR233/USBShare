@@ -1,0 +1,139 @@
+using USBShare.Models;
+using USBShare.Services;
+
+namespace USBShare.Tests;
+
+public sealed class DeviceEnabledResolverTests
+{
+    private readonly DeviceEnabledResolver _resolver = new();
+
+    [Fact]
+    public void EnabledDevice_ShouldBeIncluded_InResult()
+    {
+        var topology = BuildTopology(
+            CreateNode("H1", null, isHub: true, isShareable: false),
+            CreateNode("D1", "H1", isHub: false, isShareable: true, busId: "2-1"));
+
+        var enabledDevices = new List<DeviceEnabled>
+        {
+            new() { NodeInstanceId = "D1", Enabled = true },
+        };
+
+        var result = _resolver.Resolve(topology, enabledDevices);
+
+        Assert.Contains("2-1", result.EnabledBusIds.Keys);
+        Assert.DoesNotContain("2-1", result.InheritedBusIds);
+    }
+
+    [Fact]
+    public void EnabledHub_ShouldIncludeAllDescendants_AsInherited()
+    {
+        var topology = BuildTopology(
+            CreateNode("H_ROOT", null, isHub: true, isShareable: false),
+            CreateNode("H_CHILD", "H_ROOT", isHub: true, isShareable: false),
+            CreateNode("D1", "H_CHILD", isHub: false, isShareable: true, busId: "2-3"));
+
+        var enabledDevices = new List<DeviceEnabled>
+        {
+            new() { NodeInstanceId = "H_ROOT", Enabled = true },
+        };
+
+        var result = _resolver.Resolve(topology, enabledDevices);
+
+        Assert.Contains("2-3", result.EnabledBusIds.Keys);
+        Assert.Contains("2-3", result.InheritedBusIds);
+    }
+
+    [Fact]
+    public void DisabledDevice_ShouldNotBeIncluded()
+    {
+        var topology = BuildTopology(
+            CreateNode("H1", null, isHub: true, isShareable: false),
+            CreateNode("D1", "H1", isHub: false, isShareable: true, busId: "2-6"));
+
+        var enabledDevices = new List<DeviceEnabled>();
+
+        var result = _resolver.Resolve(topology, enabledDevices);
+
+        Assert.Empty(result.EnabledBusIds);
+        Assert.Empty(result.InheritedBusIds);
+    }
+
+    [Fact]
+    public void DirectDeviceEnabled_ShouldOverrideParentHub()
+    {
+        var topology = BuildTopology(
+            CreateNode("H1", null, isHub: true, isShareable: false),
+            CreateNode("D1", "H1", isHub: false, isShareable: true, busId: "2-10"));
+
+        var enabledDevices = new List<DeviceEnabled>
+        {
+            new() { NodeInstanceId = "D1", Enabled = true },
+        };
+
+        var result = _resolver.Resolve(topology, enabledDevices);
+
+        Assert.Contains("2-10", result.EnabledBusIds.Keys);
+        Assert.DoesNotContain("2-10", result.InheritedBusIds);
+    }
+
+    [Fact]
+    public void EnabledHub_ShouldOnlyIncludeShareableDescendantDevices()
+    {
+        var topology = BuildTopology(
+            CreateNode("H_ROOT", null, isHub: true, isShareable: false),
+            CreateNode("D_SHAREABLE", "H_ROOT", isHub: false, isShareable: true, busId: "5-1"),
+            CreateNode("D_NOT_IN_LIST", "H_ROOT", isHub: false, isShareable: false, busId: "5-2"));
+
+        var enabledDevices = new List<DeviceEnabled>
+        {
+            new() { NodeInstanceId = "H_ROOT", Enabled = true },
+        };
+
+        var result = _resolver.Resolve(topology, enabledDevices);
+
+        Assert.Contains("5-1", result.EnabledBusIds.Keys);
+        Assert.DoesNotContain("5-2", result.EnabledBusIds.Keys);
+        Assert.Single(result.EnabledBusIds);
+    }
+
+    private static UsbTopologySnapshot BuildTopology(params UsbTopologyNode[] nodes)
+    {
+        var map = nodes.ToDictionary(node => node.InstanceId, StringComparer.OrdinalIgnoreCase);
+        foreach (var node in nodes)
+        {
+            if (!string.IsNullOrWhiteSpace(node.ParentInstanceId) &&
+                map.TryGetValue(node.ParentInstanceId, out var parent))
+            {
+                parent.Children.Add(node.InstanceId);
+            }
+        }
+
+        return new UsbTopologySnapshot
+        {
+            Nodes = map,
+            RootNodes = nodes
+                .Where(node => string.IsNullOrWhiteSpace(node.ParentInstanceId))
+                .ToList(),
+        };
+    }
+
+    private static UsbTopologyNode CreateNode(
+        string instanceId,
+        string? parentId,
+        bool isHub,
+        bool isShareable,
+        string? busId = null)
+    {
+        return new UsbTopologyNode
+        {
+            InstanceId = instanceId,
+            ParentInstanceId = parentId,
+            DisplayName = instanceId,
+            DeviceClass = "USB",
+            IsHub = isHub,
+            IsShareable = isShareable,
+            BusId = busId,
+        };
+    }
+}

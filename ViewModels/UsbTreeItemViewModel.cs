@@ -89,9 +89,11 @@ public sealed class UsbTreeItemViewModel : BindableBase
             {
                 OnPropertyChanged(nameof(StatusIcon));
                 OnPropertyChanged(nameof(StatusBrush));
+                OnPropertyChanged(nameof(StatusBrushNew));
                 OnPropertyChanged(nameof(StatusText));
                 OnPropertyChanged(nameof(ShowStatusBadge));
                 OnPropertyChanged(nameof(StatusBadgeBrush));
+                OnPropertyChanged(nameof(HasStatusIcon));
             }
         }
     }
@@ -106,9 +108,12 @@ public sealed class UsbTreeItemViewModel : BindableBase
         {
             if (SetProperty(ref _isEnabled, value))
             {
+                OnPropertyChanged(nameof(IsInteractive));
+                OnPropertyChanged(nameof(ShowCheckBox));
                 OnPropertyChanged(nameof(StatusGlyph));
                 OnPropertyChanged(nameof(StatusBrush));
                 OnPropertyChanged(nameof(HasStatus));
+                UpdateShareStatus();
             }
         }
     }
@@ -126,6 +131,7 @@ public sealed class UsbTreeItemViewModel : BindableBase
                 OnPropertyChanged(nameof(StatusGlyph));
                 OnPropertyChanged(nameof(StatusBrush));
                 OnPropertyChanged(nameof(IsInteractive));
+                OnPropertyChanged(nameof(ShowCheckBox));
                 UpdateShareStatus();
             }
         }
@@ -139,12 +145,12 @@ public sealed class UsbTreeItemViewModel : BindableBase
     /// <summary>
     /// 是否可交互（非继承状态）。
     /// </summary>
-    public bool IsInteractive => IsEnabled && !IsInherited;
+    public bool IsInteractive => CanEnable && !IsInherited;
 
     /// <summary>
     /// 是否显示 CheckBox（可交互且可分享）。
     /// </summary>
-    public bool ShowCheckBox => IsInteractive && IsShareable;
+    public bool ShowCheckBox => IsInteractive;
 
     /// <summary>
     /// 状态图标。
@@ -174,6 +180,19 @@ public sealed class UsbTreeItemViewModel : BindableBase
             : IsEnabled
                 ? new SolidColorBrush(Colors.Green)   // 直接启用用绿色
                 : new SolidColorBrush(Colors.LightGray);
+
+    /// <summary>
+    /// 基于 ShareStatus 的状态色（用于新版状态图标绑定）。
+    /// </summary>
+    public SolidColorBrush StatusBrushNew => ShareStatus switch
+    {
+        DeviceShareStatus.Enabled => new SolidColorBrush(ColorFromString("#228B22")),
+        DeviceShareStatus.Inherited => new SolidColorBrush(ColorFromString("#9ACD32")),
+        DeviceShareStatus.Bound => new SolidColorBrush(ColorFromString("#1E90FF")),
+        DeviceShareStatus.Attached => new SolidColorBrush(ColorFromString("#32CD32")),
+        DeviceShareStatus.Error => new SolidColorBrush(ColorFromString("#FF4500")),
+        _ => new SolidColorBrush(Colors.Gray),
+    };
 
     /// <summary>
     /// 新的状态图标（基于 ShareStatus）。

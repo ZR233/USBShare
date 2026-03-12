@@ -19,11 +19,18 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="..\..\Models\RuleNodeType.cs" Link="Shared\Models\RuleNodeType.cs" />
-    <Compile Include="..\..\Models\ShareRule.cs" Link="Shared\Models\ShareRule.cs" />
+    <Compile Include="..\..\Models\DeviceEnabled.cs" Link="Shared\Models\DeviceEnabled.cs" />
+    <Compile Include="..\..\Models\DeviceEnabledResult.cs" Link="Shared\Models\DeviceEnabledResult.cs" />
+    <Compile Include="..\..\Models\PnpDeviceNode.cs" Link="Shared\Models\PnpDeviceNode.cs" />
     <Compile Include="..\..\Models\UsbTopologyNode.cs" Link="Shared\Models\UsbTopologyNode.cs" />
-    <Compile Include="..\..\Models\RuleResolutionResult.cs" Link="Shared\Models\RuleResolutionResult.cs" />
-    <Compile Include="..\..\Services\RuleResolver.cs" Link="Shared\Services\RuleResolver.cs" />
+    <Compile Include="..\..\Models\UsbipListResult.cs" Link="Shared\Models\UsbipListResult.cs" />
+    <Compile Include="..\..\Models\UsbipStateSnapshot.cs" Link="Shared\Models\UsbipStateSnapshot.cs" />
+    <Compile Include="..\..\Services\DeviceEnabledResolver.cs" Link="Shared\Services\DeviceEnabledResolver.cs" />
+    <Compile Include="..\..\Services\PnpDeviceService.cs" Link="Shared\Services\PnpDeviceService.cs" />
+    <Compile Include="..\..\Services\ProcessRunner.cs" Link="Shared\Services\ProcessRunner.cs" />
+    <Compile Include="..\..\Services\UsbTopologyService.cs" Link="Shared\Services\UsbTopologyService.cs" />
+    <Compile Include="..\..\Services\UsbipdService.cs" Link="Shared\Services\UsbipdService.cs" />
+    <Compile Include="..\..\Services\Native\CfgMgr32.cs" Link="Shared\Services\Native\CfgMgr32.cs" />
   </ItemGroup>
 
 </Project>

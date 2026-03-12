@@ -1,197 +1,258 @@
-using System.Text.Json;
 using USBShare.Models;
 
 namespace USBShare.Services;
 
 public interface IUsbTopologyService
 {
-    Task<UsbTopologySnapshot> BuildSnapshotAsync(UsbipStateSnapshot state, CancellationToken cancellationToken = default);
+    Task<UsbTopologySnapshot> BuildSnapshotAsync(CancellationToken cancellationToken = default);
 }
 
 public sealed class UsbTopologyService : IUsbTopologyService
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-    };
+    private readonly IPnpDeviceService _pnpDeviceService;
+    private readonly IUsbipdService _usbipdService;
 
-    private readonly IProcessRunner _processRunner;
-
-    public UsbTopologyService(IProcessRunner processRunner)
+    public UsbTopologyService(IPnpDeviceService pnpDeviceService, IUsbipdService usbipdService)
     {
-        _processRunner = processRunner;
+        _pnpDeviceService = pnpDeviceService;
+        _usbipdService = usbipdService;
     }
 
-    public async Task<UsbTopologySnapshot> BuildSnapshotAsync(UsbipStateSnapshot state, CancellationToken cancellationToken = default)
+    public async Task<UsbTopologySnapshot> BuildSnapshotAsync(CancellationToken cancellationToken = default)
     {
-        List<PnpDeviceRecord> records;
+        var nodes = await BuildPnpTreeAsync(cancellationToken).ConfigureAwait(false);
+        await MergeUsbipdDataAsync(nodes, cancellationToken).ConfigureAwait(false);
+        RebuildChildren(nodes);
+
+        return new UsbTopologySnapshot
+        {
+            Nodes = nodes,
+            RootNodes = BuildHubRootNodes(nodes),
+        };
+    }
+
+    private async Task<Dictionary<string, UsbTopologyNode>> BuildPnpTreeAsync(CancellationToken cancellationToken)
+    {
+        List<PnpDeviceNode> roots;
         try
         {
-            records = await QueryUsbPnpDevicesAsync(cancellationToken).ConfigureAwait(false);
+            roots = await _pnpDeviceService.GetUsbDeviceTreeAsync(cancellationToken).ConfigureAwait(false);
         }
         catch
         {
-            // Fallback to shareable devices only when topology query fails.
-            records = [];
+            roots = [];
         }
 
         var nodes = new Dictionary<string, UsbTopologyNode>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var record in records)
+        foreach (var root in roots)
         {
-            if (string.IsNullOrWhiteSpace(record.InstanceId))
-            {
-                continue;
-            }
-
-            var instanceId = record.InstanceId.Trim();
-            nodes[instanceId] = new UsbTopologyNode
-            {
-                InstanceId = instanceId,
-                ParentInstanceId = string.IsNullOrWhiteSpace(record.ParentInstanceId) ? null : record.ParentInstanceId.Trim(),
-                DisplayName = string.IsNullOrWhiteSpace(record.FriendlyName) ? instanceId : record.FriendlyName.Trim(),
-                DeviceClass = record.Class?.Trim() ?? string.Empty,
-                IsHub = LooksLikeHub(record.InstanceId, record.FriendlyName),
-            };
+            AddPnpNode(root, nodes, fallbackParentInstanceId: null);
         }
 
-        foreach (var device in state.Devices)
-        {
-            if (string.IsNullOrWhiteSpace(device.InstanceId))
-            {
-                continue;
-            }
-
-            var instanceId = device.InstanceId.Trim();
-            if (!nodes.TryGetValue(instanceId, out var node))
-            {
-                node = new UsbTopologyNode
-                {
-                    InstanceId = instanceId,
-                    DisplayName = string.IsNullOrWhiteSpace(device.Description) ? instanceId : device.Description,
-                    DeviceClass = "USB",
-                    ParentInstanceId = null,
-                    IsHub = false,
-                };
-                nodes[instanceId] = node;
-            }
-
-            node.IsShareable = !string.IsNullOrWhiteSpace(device.BusId);
-            node.BusId = device.BusId;
-        }
-
-        foreach (var node in nodes.Values)
-        {
-            if (!string.IsNullOrWhiteSpace(node.ParentInstanceId) &&
-                nodes.TryGetValue(node.ParentInstanceId, out var parent))
-            {
-                parent.Children.Add(node.InstanceId);
-            }
-        }
+        RebuildChildren(nodes);
 
         foreach (var node in nodes.Values)
         {
             if (!node.IsHub && node.Children.Count > 0)
             {
-                node.IsHub = LooksLikeHub(node.InstanceId, node.DisplayName) ||
-                             string.Equals(node.DeviceClass, "USB", StringComparison.OrdinalIgnoreCase);
+                node.IsHub = LooksLikeHub(node.InstanceId, node.DisplayName, node.DeviceClass);
             }
         }
 
-        var rootNodes = nodes.Values
-            .Where(node => string.IsNullOrWhiteSpace(node.ParentInstanceId) || !nodes.ContainsKey(node.ParentInstanceId))
-            .OrderBy(node => node.DisplayName, StringComparer.CurrentCultureIgnoreCase)
-            .ToList();
+        return nodes;
+    }
 
-        if (rootNodes.Count == 0 && nodes.Count > 0)
+    private async Task MergeUsbipdDataAsync(Dictionary<string, UsbTopologyNode> nodes, CancellationToken cancellationToken)
+    {
+        UsbipListResult list;
+        UsbipStateSnapshot state;
+
+        try
         {
-            rootNodes = nodes.Values
-                .Where(node => node.IsHub)
-                .OrderBy(node => node.DisplayName, StringComparer.CurrentCultureIgnoreCase)
-                .ToList();
+            var listTask = _usbipdService.GetListAsync(cancellationToken);
+            var stateTask = _usbipdService.GetStateAsync(cancellationToken);
+            await Task.WhenAll(listTask, stateTask).ConfigureAwait(false);
+            list = listTask.Result;
+            state = stateTask.Result;
+        }
+        catch
+        {
+            return;
         }
 
-        if (rootNodes.Count == 0 && nodes.Count > 0)
+        var stateByBusId = state.Devices
+            .Where(device => !string.IsNullOrWhiteSpace(device.BusId))
+            .GroupBy(device => device.BusId.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var listDevice in list.Devices.Where(device => !string.IsNullOrWhiteSpace(device.BusId)))
         {
-            rootNodes = nodes.Values
-                .OrderBy(node => node.DisplayName, StringComparer.CurrentCultureIgnoreCase)
-                .Take(64)
-                .ToList();
+            var busId = listDevice.BusId.Trim();
+            if (!stateByBusId.TryGetValue(busId, out var stateDevice))
+            {
+                // 通过 busid 无法映射到 state，就无法进一步映射到 InstanceId。
+                continue;
+            }
+
+            var instanceId = NormalizeInstanceId(stateDevice.InstanceId) ?? NormalizeInstanceId(listDevice.InstanceId);
+            if (string.IsNullOrWhiteSpace(instanceId))
+            {
+                continue;
+            }
+
+            if (!nodes.TryGetValue(instanceId, out var node))
+            {
+                node = new UsbTopologyNode
+                {
+                    InstanceId = instanceId,
+                    ParentInstanceId = null,
+                    DisplayName = ResolveDisplayName(listDevice.Description, stateDevice.Description, instanceId),
+                    DeviceClass = "USB",
+                    IsHub = LooksLikeHub(instanceId, listDevice.Description, "USB"),
+                };
+                nodes[instanceId] = node;
+            }
+
+            node.BusId = busId;
+            node.IsShareable = true;
+
+            if (string.IsNullOrWhiteSpace(node.DisplayName) ||
+                string.Equals(node.DisplayName, node.InstanceId, StringComparison.OrdinalIgnoreCase))
+            {
+                node.DisplayName = ResolveDisplayName(listDevice.Description, stateDevice.Description, node.InstanceId);
+            }
+        }
+    }
+
+    private static void AddPnpNode(
+        PnpDeviceNode source,
+        Dictionary<string, UsbTopologyNode> nodes,
+        string? fallbackParentInstanceId)
+    {
+        var instanceId = NormalizeInstanceId(source.InstanceId);
+        if (string.IsNullOrWhiteSpace(instanceId))
+        {
+            return;
+        }
+
+        var parentInstanceId = NormalizeInstanceId(source.ParentInstanceId) ?? NormalizeInstanceId(fallbackParentInstanceId);
+        if (string.Equals(instanceId, parentInstanceId, StringComparison.OrdinalIgnoreCase))
+        {
+            parentInstanceId = null;
+        }
+
+        if (!nodes.TryGetValue(instanceId, out var node))
+        {
+            node = new UsbTopologyNode
+            {
+                InstanceId = instanceId,
+                ParentInstanceId = parentInstanceId,
+                DisplayName = ResolveDisplayName(source.FriendlyName, source.Description, instanceId),
+                DeviceClass = source.DeviceClass?.Trim() ?? string.Empty,
+                IsHub = source.IsHub || LooksLikeHub(instanceId, source.FriendlyName, source.DeviceClass),
+            };
+            nodes[instanceId] = node;
+        }
+        else
+        {
+            node.ParentInstanceId ??= parentInstanceId;
+            node.IsHub = node.IsHub || source.IsHub || LooksLikeHub(instanceId, source.FriendlyName, source.DeviceClass);
+
+            if (string.IsNullOrWhiteSpace(node.DeviceClass))
+            {
+                node.DeviceClass = source.DeviceClass?.Trim() ?? string.Empty;
+            }
+
+            if (string.IsNullOrWhiteSpace(node.DisplayName) ||
+                string.Equals(node.DisplayName, node.InstanceId, StringComparison.OrdinalIgnoreCase))
+            {
+                node.DisplayName = ResolveDisplayName(source.FriendlyName, source.Description, instanceId);
+            }
+        }
+
+        foreach (var child in source.Children)
+        {
+            AddPnpNode(child, nodes, instanceId);
+        }
+    }
+
+    private static void RebuildChildren(Dictionary<string, UsbTopologyNode> nodes)
+    {
+        foreach (var node in nodes.Values)
+        {
+            node.Children.Clear();
+        }
+
+        foreach (var node in nodes.Values)
+        {
+            if (string.IsNullOrWhiteSpace(node.ParentInstanceId) ||
+                !nodes.TryGetValue(node.ParentInstanceId, out var parent) ||
+                string.Equals(node.InstanceId, parent.InstanceId, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            parent.Children.Add(node.InstanceId);
         }
 
         foreach (var node in nodes.Values)
         {
             node.Children = node.Children
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(childId => nodes.TryGetValue(childId, out var childNode) ? childNode.DisplayName : childId,
+                .OrderBy(childId => nodes.TryGetValue(childId, out var child) ? child.DisplayName : childId,
                     StringComparer.CurrentCultureIgnoreCase)
                 .ToList();
         }
-
-        return new UsbTopologySnapshot
-        {
-            Nodes = nodes,
-            RootNodes = rootNodes,
-        };
     }
 
-    private async Task<List<PnpDeviceRecord>> QueryUsbPnpDevicesAsync(CancellationToken cancellationToken)
+    private static List<UsbTopologyNode> BuildHubRootNodes(Dictionary<string, UsbTopologyNode> nodes)
     {
-        const string script = """
-                              $devices = Get-PnpDevice -PresentOnly |
-                                Where-Object { $_.InstanceId -like 'USB*' -or $_.InstanceId -like 'USB4*' -or $_.InstanceId -like 'USBROOT*' } |
-                                Select-Object InstanceId, FriendlyName, Class
-
-                              $parents = $devices |
-                                Get-PnpDeviceProperty -KeyName 'DEVPKEY_Device_Parent' -ErrorAction SilentlyContinue |
-                                Select-Object InstanceId, Data
-
-                              $parentById = @{}
-                              foreach ($p in $parents) {
-                                $parentById[$p.InstanceId] = $p.Data
-                              }
-
-                              $rows = foreach ($d in $devices) {
-                                [PSCustomObject]@{
-                                  InstanceId = $d.InstanceId
-                                  ParentInstanceId = $parentById[$d.InstanceId]
-                                  FriendlyName = $d.FriendlyName
-                                  Class = $d.Class
-                                }
-                              }
-
-                              $rows | ConvertTo-Json -Depth 4 -Compress
-                              """;
-
-        var encodedScript = Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(script));
-        var command = $"-NoLogo -NoProfile -ExecutionPolicy Bypass -EncodedCommand {encodedScript}";
-        var result = await _processRunner
-            .RunAsync("powershell", command, timeout: TimeSpan.FromSeconds(90), cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
-
-        if (!result.IsSuccess)
-        {
-            throw new InvalidOperationException($"Failed to query USB PnP topology: {result.StandardError}");
-        }
-
-        var json = result.StandardOutput;
-        if (string.IsNullOrWhiteSpace(json))
+        if (nodes.Count == 0)
         {
             return [];
         }
 
-        json = json.Trim();
-        if (json.StartsWith("{", StringComparison.Ordinal))
+        var roots = nodes.Values
+            .Where(node =>
+                node.IsHub &&
+                (string.IsNullOrWhiteSpace(node.ParentInstanceId) ||
+                 !nodes.TryGetValue(node.ParentInstanceId, out var parent) ||
+                 !parent.IsHub))
+            .OrderBy(node => node.DisplayName, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+
+        if (roots.Count > 0)
         {
-            var single = JsonSerializer.Deserialize<PnpDeviceRecord>(json, JsonOptions);
-            return single is null ? [] : [single];
+            return roots;
         }
 
-        var list = JsonSerializer.Deserialize<List<PnpDeviceRecord>>(json, JsonOptions);
-        return list ?? [];
+        return nodes.Values
+            .Where(node => string.IsNullOrWhiteSpace(node.ParentInstanceId) || !nodes.ContainsKey(node.ParentInstanceId))
+            .OrderBy(node => node.DisplayName, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
     }
 
-    private static bool LooksLikeHub(string instanceId, string? displayName)
+    private static string? NormalizeInstanceId(string? instanceId)
+    {
+        return string.IsNullOrWhiteSpace(instanceId) ? null : instanceId.Trim();
+    }
+
+    private static string ResolveDisplayName(string? preferred, string? alternate, string fallback)
+    {
+        if (!string.IsNullOrWhiteSpace(preferred))
+        {
+            return preferred.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(alternate))
+        {
+            return alternate.Trim();
+        }
+
+        return fallback;
+    }
+
+    private static bool LooksLikeHub(string instanceId, string? displayName, string? deviceClass)
     {
         if (instanceId.Contains("ROOT_HUB", StringComparison.OrdinalIgnoreCase))
         {
@@ -199,6 +260,11 @@ public sealed class UsbTopologyService : IUsbTopologyService
         }
 
         if (instanceId.Contains("ROOT_DEVICE_ROUTER", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (string.Equals(deviceClass, "USBHUB", StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
@@ -212,13 +278,5 @@ public sealed class UsbTopologyService : IUsbTopologyService
                || displayName.Contains("集线器", StringComparison.OrdinalIgnoreCase)
                || displayName.Contains("router", StringComparison.OrdinalIgnoreCase)
                || displayName.Contains("路由器", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private sealed class PnpDeviceRecord
-    {
-        public string InstanceId { get; set; } = string.Empty;
-        public string? ParentInstanceId { get; set; }
-        public string? FriendlyName { get; set; }
-        public string? Class { get; set; }
     }
 }
