@@ -17,6 +17,8 @@
     <WindowsAppSdkDeploymentManagerInitialize>false</WindowsAppSdkDeploymentManagerInitialize>
     <RuntimeIdentifier Condition="'$(Platform)' == 'AnyCPU'">win-x64</RuntimeIdentifier>
     <PublishProfile Condition="'$(Platform)' == 'AnyCPU'">win-x64.pubxml</PublishProfile>
+    <!-- Unpackaged for local debugging: app.manifest requireAdministrator takes effect directly -->
+    <WindowsPackageType Condition="'$(Configuration)' == 'Debug'">None</WindowsPackageType>
   </PropertyGroup>
 
   <ItemGroup>

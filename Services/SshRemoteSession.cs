@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Renci.SshNet;
 using USBShare.Models;
@@ -87,9 +88,24 @@ public sealed class SshRemoteSession : ISshRemoteSession
 
         var attachCommand = BuildAttachCommand(busId, _remote.TunnelPort);
         var script = BuildSudoScript(attachCommand, sudoPassword);
-        var result = await ExecuteBashAsync(script, cancellationToken).ConfigureAwait(false);
+        Debug.WriteLine($"[SSH][Attach] host={_remote.Host} busId={busId} tunnelPort={_remote.TunnelPort}");
+        Debug.WriteLine($"[SSH][Attach-CMD] {attachCommand}");
+        Debug.WriteLine($"[SSH][Attach-SH ] {script}");
 
-        if (!result.Success && result.Output.Contains("already", StringComparison.OrdinalIgnoreCase))
+        // Ensure vhci_hcd kernel module is loaded before attaching (idempotent).
+        var modprobeScript = BuildSudoScript("modprobe vhci_hcd", sudoPassword);
+        var modprobeResult = await ExecuteBashAsync(modprobeScript, cancellationToken).ConfigureAwait(false);
+        Debug.WriteLine($"[SSH][modprobe vhci_hcd] ok={modprobeResult.Success} err={modprobeResult.Error}");
+
+        var result = await ExecuteBashAsync(script, cancellationToken).ConfigureAwait(false);
+        Debug.WriteLine($"[SSH][Attach-OUT] ok={result.Success} exit={result.ExitCode} out={result.Output} err={result.Error}");
+
+        // Treat "already attached" or "Device busy (exported)" as success:
+        // the latter happens when vhci sysfs is unreadable but the device was previously attached.
+        if (!result.Success &&
+            (result.Output.Contains("already", StringComparison.OrdinalIgnoreCase) ||
+             result.Error.Contains("already", StringComparison.OrdinalIgnoreCase) ||
+             result.Error.Contains("Device busy", StringComparison.OrdinalIgnoreCase)))
         {
             return new RemoteExecutionResult(true, 0, result.Output, result.Error);
         }
@@ -126,7 +142,10 @@ public sealed class SshRemoteSession : ISshRemoteSession
         await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
 
         var bashCommand = $"bash -lc {QuoteForSingleShell(script)}";
-        return await ExecuteAsync(bashCommand, cancellationToken).ConfigureAwait(false);
+        Debug.WriteLine($"[SSH][BashExec] {bashCommand}");
+        var result = await ExecuteAsync(bashCommand, cancellationToken).ConfigureAwait(false);
+        Debug.WriteLine($"[SSH][BashResult] ok={result.Success} exit={result.ExitCode} out={result.Output} err={result.Error}");
+        return result;
     }
 
     private async Task<RemoteExecutionResult> ExecuteAsync(string command, CancellationToken cancellationToken)

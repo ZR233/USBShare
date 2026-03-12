@@ -538,7 +538,7 @@ public sealed partial class MainWindow : Window
 
     private void OnOrchestratorStateChanged(object? sender, ShareSessionState state)
     {
-        DispatcherQueue.TryEnqueue(() =>
+        DispatcherQueue?.TryEnqueue(() =>
         {
             _sessionState = state;
             ApplyAssignmentsAndConflicts();
