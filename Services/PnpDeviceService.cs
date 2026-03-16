@@ -149,6 +149,9 @@ public sealed class PnpDeviceService : IPnpDeviceService
         public string InstanceId { get; init; } = string.Empty;
         public string? ParentInstanceId { get; init; }
         public string? FriendlyName { get; init; }
+        public string? BusReportedDeviceDesc { get; init; }
+        public string? Description { get; init; }
+        public string? Manufacturer { get; init; }
         public string? DeviceClass { get; init; }
     }
 
@@ -240,6 +243,15 @@ public sealed class PnpDeviceService : IPnpDeviceService
         var friendlyName = GetDeviceProperty(devInst, CfgMgr32.DevicePropertyKeys.DEVPKEY_Device_FriendlyName);
         friendlyName ??= GetDeviceProperty(devInst, CfgMgr32.DevicePropertyKeys.DEVPKEY_Name);
 
+        // 获取设备自报告名称（USB 字符串描述符）
+        var busReportedDeviceDesc = GetDeviceProperty(devInst, CfgMgr32.DevicePropertyKeys.DEVPKEY_Device_BusReportedDeviceDesc);
+
+        // 获取设备描述
+        var description = GetDeviceProperty(devInst, CfgMgr32.DevicePropertyKeys.DEVPKEY_Device_DeviceDesc);
+
+        // 获取制造商
+        var manufacturer = GetDeviceProperty(devInst, CfgMgr32.DevicePropertyKeys.DEVPKEY_Device_Manufacturer);
+
         // 获取设备类
         var deviceClass = GetDeviceProperty(devInst, CfgMgr32.DevicePropertyKeys.DEVPKEY_Device_Class);
 
@@ -256,6 +268,9 @@ public sealed class PnpDeviceService : IPnpDeviceService
             InstanceId = instanceId,
             ParentInstanceId = parentInstanceId,
             FriendlyName = friendlyName,
+            BusReportedDeviceDesc = busReportedDeviceDesc,
+            Description = description,
+            Manufacturer = manufacturer,
             DeviceClass = deviceClass,
         };
     }
@@ -318,6 +333,9 @@ public sealed class PnpDeviceService : IPnpDeviceService
                 InstanceId = data.InstanceId,
                 ParentInstanceId = data.ParentInstanceId,
                 FriendlyName = data.FriendlyName,
+                BusReportedDeviceDesc = data.BusReportedDeviceDesc,
+                Description = data.Description,
+                Manufacturer = data.Manufacturer,
                 DeviceClass = data.DeviceClass,
                 Children = []
             };

@@ -141,7 +141,7 @@ public sealed class UsbTopologyService : IUsbTopologyService
             {
                 InstanceId = instanceId,
                 ParentInstanceId = parentInstanceId,
-                DisplayName = ResolveDisplayName(source.FriendlyName, source.Description, instanceId),
+                DisplayName = ResolvePnpDisplayName(source.FriendlyName, source.BusReportedDeviceDesc, source.Description, source.Manufacturer, instanceId),
                 DeviceClass = source.DeviceClass?.Trim() ?? string.Empty,
                 IsHub = source.IsHub || LooksLikeHub(instanceId, source.FriendlyName, source.DeviceClass),
             };
@@ -160,7 +160,7 @@ public sealed class UsbTopologyService : IUsbTopologyService
             if (string.IsNullOrWhiteSpace(node.DisplayName) ||
                 string.Equals(node.DisplayName, node.InstanceId, StringComparison.OrdinalIgnoreCase))
             {
-                node.DisplayName = ResolveDisplayName(source.FriendlyName, source.Description, instanceId);
+                node.DisplayName = ResolvePnpDisplayName(source.FriendlyName, source.BusReportedDeviceDesc, source.Description, source.Manufacturer, instanceId);
             }
         }
 
@@ -206,6 +206,13 @@ public sealed class UsbTopologyService : IUsbTopologyService
             if (node.Children.Count > 0)
             {
                 node.IsHub = true;
+            }
+
+            if (node.IsHub &&
+                (string.IsNullOrWhiteSpace(node.DisplayName) ||
+                 string.Equals(node.DisplayName, node.InstanceId, StringComparison.OrdinalIgnoreCase)))
+            {
+                node.DisplayName = GetHubFriendlyName(node.InstanceId);
             }
         }
     }
@@ -257,6 +264,42 @@ public sealed class UsbTopologyService : IUsbTopologyService
         return fallback;
     }
 
+    private static string ResolvePnpDisplayName(
+        string? friendlyName,
+        string? busReportedDeviceDesc,
+        string? description,
+        string? manufacturer,
+        string fallback)
+    {
+        if (!string.IsNullOrWhiteSpace(friendlyName))
+        {
+            return friendlyName.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(busReportedDeviceDesc))
+        {
+            return busReportedDeviceDesc.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(description))
+        {
+            var desc = description.Trim();
+            if (!string.IsNullOrWhiteSpace(manufacturer))
+            {
+                var mfr = manufacturer.Trim();
+                if (!mfr.StartsWith("(", StringComparison.Ordinal) &&
+                    !desc.Contains(mfr, StringComparison.OrdinalIgnoreCase))
+                {
+                    return $"{mfr} {desc}";
+                }
+            }
+
+            return desc;
+        }
+
+        return fallback;
+    }
+
     private static bool LooksLikeHub(string instanceId, string? displayName, string? deviceClass)
     {
         if (instanceId.Contains("ROOT_HUB", StringComparison.OrdinalIgnoreCase))
@@ -283,5 +326,30 @@ public sealed class UsbTopologyService : IUsbTopologyService
                || displayName.Contains("集线器", StringComparison.OrdinalIgnoreCase)
                || displayName.Contains("router", StringComparison.OrdinalIgnoreCase)
                || displayName.Contains("路由器", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetHubFriendlyName(string instanceId)
+    {
+        if (instanceId.Contains("ROOT_HUB30", StringComparison.OrdinalIgnoreCase))
+        {
+            return "USB 3.0 Root Hub";
+        }
+
+        if (instanceId.Contains("ROOT_HUB20", StringComparison.OrdinalIgnoreCase))
+        {
+            return "USB 2.0 Root Hub";
+        }
+
+        if (instanceId.Contains("ROOT_HUB", StringComparison.OrdinalIgnoreCase))
+        {
+            return "USB Root Hub";
+        }
+
+        if (instanceId.Contains("ROOT_DEVICE_ROUTER", StringComparison.OrdinalIgnoreCase))
+        {
+            return "USB Host Controller";
+        }
+
+        return instanceId;
     }
 }

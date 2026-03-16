@@ -190,6 +190,12 @@ internal static class CfgMgr32
             new Guid(0xa45c254e, 0xdf1c, 0x4efd, 0x80, 0x20, 0x67, 0xd1, 0x46, 0xa8, 0x50, 0xe0), 4);
 
         /// <summary>
+        /// DEVPKEY_Device_DeviceDesc - 设备描述
+        /// </summary>
+        public static readonly DEVPROPKEY DEVPKEY_Device_DeviceDesc = new(
+            new Guid(0xa45c254e, 0xdf1c, 0x4efd, 0x80, 0x20, 0x67, 0xd1, 0x46, 0xa8, 0x50, 0xe0), 2);
+
+        /// <summary>
         /// DEVPKEY_Device_Class - 设备类
         /// </summary>
         public static readonly DEVPROPKEY DEVPKEY_Device_Class = new(
@@ -206,6 +212,12 @@ internal static class CfgMgr32
         /// </summary>
         public static readonly DEVPROPKEY DEVPKEY_Device_Manufacturer = new(
             new Guid(0xa45c254e, 0xdf1c, 0x4efd, 0x80, 0x20, 0x67, 0xd1, 0x46, 0xa8, 0x50, 0xe0), 13);
+
+        /// <summary>
+        /// DEVPKEY_Device_BusReportedDeviceDesc - 设备自报告名称（来自 USB 字符串描述符）
+        /// </summary>
+        public static readonly DEVPROPKEY DEVPKEY_Device_BusReportedDeviceDesc = new(
+            new Guid(0x540b947e, 0x8b40, 0x45bc, 0xa8, 0xa2, 0x6a, 0x0b, 0x89, 0x4c, 0xbd, 0xa2), 4);
 
         /// <summary>
         /// DEVPKEY_Name - 设备名称

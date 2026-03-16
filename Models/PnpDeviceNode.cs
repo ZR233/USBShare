@@ -32,6 +32,11 @@ public sealed class PnpDeviceNode
     public string? Description { get; set; }
 
     /// <summary>
+    /// 设备自报告名称（来自 USB 字符串描述符）
+    /// </summary>
+    public string? BusReportedDeviceDesc { get; set; }
+
+    /// <summary>
     /// 制造商
     /// </summary>
     public string? Manufacturer { get; set; }
