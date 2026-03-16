@@ -1,0 +1,133 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+  release:
+    types: [ published ]
+
+env:
+  DOTNET_VERSION: 8.0.x
+  CONFIGURATION: Release
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: windows-2022
+    strategy:
+      matrix:
+        platform: [x64, x86, ARM64]
+        include:
+          - platform: x64
+            rid: win-x64
+            msbuild_platform: x64
+          - platform: x86
+            rid: win-x86
+            msbuild_platform: x86
+          - platform: ARM64
+            rid: win-arm64
+            msbuild_platform: ARM64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore dependencies
+        run: dotnet restore USBShare.csproj
+
+      - name: Build Release
+        run: |
+          dotnet build USBShare.csproj `
+            --configuration ${{ env.CONFIGURATION }} `
+            --no-restore `
+            /p:Platform=${{ matrix.msbuild_platform }} `
+            /p:WindowsPackageType=None
+
+      - name: Publish as Self-Contained
+        run: |
+          dotnet publish USBShare.csproj `
+            --configuration ${{ env.CONFIGURATION }} `
+            --no-build `
+            --runtime ${{ matrix.rid }} `
+            --self-contained true `
+            /p:PublishSingleFile=false `
+            /p:EnableCompressionInSingleFile=true `
+            /p:IncludeNativeLibrariesForSelfExtract=true `
+            -o "publish/${{ matrix.rid }}"
+
+      - name: Create Archive
+        if: github.event_name == 'release'
+        shell: pwsh
+        run: |
+          $archiveName = "USBShare-${{ github.event.release.tag_name }}-${{ matrix.rid }}.zip"
+          Compress-Archive -Path "publish/${{ matrix.rid }}/*" -DestinationPath $archiveName
+          Write-Output "archive=$archiveName" >> $env:GITHUB_ENV
+
+      - name: Upload Build Artifact
+        if: github.event_name != 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: USBShare-${{ matrix.rid }}
+          path: publish/${{ matrix.rid }}
+
+      - name: Upload Release Asset
+        if: github.event_name == 'release'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ${{ env.archive }}
+          asset_name: ${{ env.archive }}
+          asset_content_type: application/zip
+
+  build-msix:
+    name: Build MSIX (${{ matrix.platform }})
+    runs-on: windows-2022
+    if: github.event_name == 'release'
+    strategy:
+      matrix:
+        platform: [x64, x86, ARM64]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Build MSIX
+        run: |
+          dotnet build USBShare.csproj `
+            --configuration ${{ env.CONFIGURATION }} `
+            /p:Platform=${{ matrix.platform }} `
+            /p:WindowsPackageType=MSIX `
+            /p:GenerateAppxPackageOnBuild=true `
+            /p:AppxPackageSigningEnabled=false
+
+      - name: Find MSIX
+        id: find-msix
+        shell: pwsh
+        run: |
+          $msix = Get-ChildItem -Path "bin/${{ env.CONFIGURATION }}/${{ matrix.platform }}" -Filter *.msix | Select-Object -First 1
+          Write-Output "msix_path=$($msix.FullName)" >> $env:GITHUB_ENV
+          Write-Output "msix_name=$($msix.Name)" >> $env:GITHUB_ENV
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ${{ env.msix_path }}
+          asset_name: ${{ env.msix_name }}
+          asset_content_type: application/vnd.ms-package
