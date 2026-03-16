@@ -8,4 +8,8 @@ public sealed class AppSettings
     /// 所有启用的 USB 设备都将分享到此服务器。
     /// </summary>
     public Guid? SelectedRemoteId { get; set; }
+    /// <summary>
+    /// 满足所有条件时，程序启动后自动开始分享。
+    /// </summary>
+    public bool AutoStart { get; set; } = true;
 }

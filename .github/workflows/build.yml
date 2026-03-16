@@ -12,6 +12,9 @@ env:
   DOTNET_VERSION: '8.0.x'
   CONFIGURATION: Release
 
+permissions:
+  contents: write
+
 jobs:
   # ── Portable (ZIP) build ─────────────────────────────────────────────────────
   build:
@@ -61,7 +64,7 @@ jobs:
         if: github.event_name == 'release'
         shell: pwsh
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $zip = "USBShare-${{ github.event.release.tag_name }}-${{ matrix.rid }}.zip"
           Compress-Archive -Path "publish/${{ matrix.rid }}/*" -DestinationPath $zip
@@ -92,46 +95,69 @@ jobs:
       - name: Restore
         run: dotnet restore USBShare.csproj -p:Platform=${{ matrix.platform }}
 
-      # A self-signed cert is required; without signing Windows rejects the MSIX.
-      # Users install the bundled .cer into "Trusted People" once, then the MSIX.
-      - name: Create self-signed certificate
+      # Prefer a stable signing cert from secrets (official CI pattern).
+      # Fallback: generate ephemeral self-signed cert for this release run.
+      - name: Prepare signing certificate
         shell: pwsh
         run: |
-          $cert = New-SelfSignedCertificate `
-            -Subject "CN=zrufo" `
-            -CertStoreLocation "Cert:\CurrentUser\My" `
-            -Type CodeSigningCert `
-            -KeyUsage DigitalSignature `
-            -HashAlgorithm SHA256
-          "CERT_THUMBPRINT=$($cert.Thumbprint)" >> $env:GITHUB_ENV
-          Export-Certificate `
-            -Cert "Cert:\CurrentUser\My\$($cert.Thumbprint)" `
-            -FilePath "USBShare-${{ matrix.rid }}.cer"
+          if ("${{ secrets.BASE64_ENCODED_PFX }}") {
+            [IO.File]::WriteAllBytes("signing-cert.pfx", [Convert]::FromBase64String("${{ secrets.BASE64_ENCODED_PFX }}"))
+            "CERT_PFX_PATH=$PWD/signing-cert.pfx" >> $env:GITHUB_ENV
+            "CERT_PASSWORD=${{ secrets.PFX_PASSWORD }}" >> $env:GITHUB_ENV
+          }
+          else {
+            $cert = New-SelfSignedCertificate `
+              -Subject "CN=zrufo" `
+              -CertStoreLocation "Cert:\CurrentUser\My" `
+              -Type CodeSigningCert `
+              -KeyUsage DigitalSignature `
+              -HashAlgorithm SHA256
+
+            Export-Certificate `
+              -Cert "Cert:\CurrentUser\My\$($cert.Thumbprint)" `
+              -FilePath "USBShare-${{ matrix.rid }}.cer"
+
+            $certPassword = ConvertTo-SecureString -String "usbshare-ci" -AsPlainText -Force
+            Export-PfxCertificate `
+              -Cert "Cert:\CurrentUser\My\$($cert.Thumbprint)" `
+              -FilePath "signing-cert.pfx" `
+              -Password $certPassword | Out-Null
+
+            "CERT_PFX_PATH=$PWD/signing-cert.pfx" >> $env:GITHUB_ENV
+            "CERT_PASSWORD=usbshare-ci" >> $env:GITHUB_ENV
+          }
 
       - name: Build MSIX
+        shell: pwsh
         run: |
+          New-Item -ItemType Directory -Force -Path "artifacts/msix" | Out-Null
+
           dotnet build USBShare.csproj `
             -c ${{ env.CONFIGURATION }} `
             -p:Platform=${{ matrix.platform }} `
             -p:RuntimeIdentifier=${{ matrix.rid }} `
             -p:WindowsPackageType=MSIX `
             -p:GenerateAppxPackageOnBuild=true `
+            -p:UapAppxPackageBuildMode=SideloadOnly `
+            -p:AppxBundle=Never `
+            -p:AppxPackageDir=$PWD/artifacts/msix/ `
             -p:AppxPackageSigningEnabled=true `
-            -p:PackageCertificateThumbprint=${{ env.CERT_THUMBPRINT }} `
+            -p:PackageCertificateKeyFile=$env:CERT_PFX_PATH `
+            -p:PackageCertificatePassword=$env:CERT_PASSWORD `
             --no-restore
 
       - name: Upload MSIX and certificate
         shell: pwsh
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # AppPackages is nested under the TFM/RID output folder; search recursively.
-          $msix = Get-ChildItem -Recurse -Path "bin" -Include "*.msix","*.msixbundle" |
-            Where-Object { $_.FullName -notlike "*Dependencies*" } |
+          $msix = Get-ChildItem -Recurse -Path "artifacts/msix" -Include "*.msix","*.msixbundle" |
             Select-Object -First 1
-          if (-not $msix) { Write-Error "MSIX not found under bin\"; exit 1 }
+          if (-not $msix) { Write-Error "MSIX not found under artifacts/msix"; exit 1 }
 
           $dest = "USBShare-${{ github.event.release.tag_name }}-${{ matrix.rid }}.msix"
           Copy-Item $msix.FullName $dest
           gh release upload "${{ github.event.release.tag_name }}" $dest
-          gh release upload "${{ github.event.release.tag_name }}" "USBShare-${{ matrix.rid }}.cer"
+          if (Test-Path "USBShare-${{ matrix.rid }}.cer") {
+            gh release upload "${{ github.event.release.tag_name }}" "USBShare-${{ matrix.rid }}.cer"
+          }

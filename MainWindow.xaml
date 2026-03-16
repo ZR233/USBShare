@@ -88,6 +88,9 @@
                                    SmallChange="1"
                                    SpinButtonPlacementMode="Inline"
                                    ValueChanged="PollIntervalNumberBox_ValueChanged" />
+                        <ToggleSwitch x:Name="AutoStartToggle"
+                                      Header="启动时自动开始分享"
+                                      Toggled="AutoStartToggle_Toggled" />
                         <TextBlock x:Name="AdminHintTextBlock"
                                    TextWrapping="Wrap"
                                    Opacity="0.8" />

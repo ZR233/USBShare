@@ -52,6 +52,7 @@ public sealed partial class MainWindow : Window
         RefreshRemoteList();
         UpdateCurrentTargetDisplay();
         PollIntervalNumberBox.Value = _config.Settings.PollIntervalSeconds;
+        AutoStartToggle.IsOn = _config.Settings.AutoStart;
 
         _isAdmin = _adminService.IsRunningAsAdministrator();
         if (!_isAdmin)
@@ -75,6 +76,7 @@ public sealed partial class MainWindow : Window
         }
 
         await RefreshTopologyAsync();
+        await TryAutoStartAsync();
     }
 
     private async void MainWindow_Closed(object sender, WindowEventArgs args)
@@ -97,6 +99,39 @@ public sealed partial class MainWindow : Window
     }
 
     private Task SaveConfigurationAsync() => _configStore.SaveAsync(_config);
+
+    private bool CanAutoStart() =>
+        _config.Settings.AutoStart &&
+        _isAdmin &&
+        _config.Settings.SelectedRemoteId.HasValue &&
+        _config.Remotes.Any(r => r.Id == _config.Settings.SelectedRemoteId!.Value) &&
+        _config.EnabledDevices.Any(e => e.Enabled);
+
+    private async Task TryAutoStartAsync()
+    {
+        if (!CanAutoStart())
+        {
+            return;
+        }
+
+        try
+        {
+            await _orchestrator.StartAsync(_config);
+            StartShareButton.IsEnabled = false;
+            StopShareButton.IsEnabled = true;
+            SetStatus("已自动开始分享。", InfoBarSeverity.Success);
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"自动启动失败: {ex.Message}", InfoBarSeverity.Error);
+        }
+    }
+
+    private async void AutoStartToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        _config.Settings.AutoStart = AutoStartToggle.IsOn;
+        await PersistAndPropagateConfigurationAsync();
+    }
 
     private void RefreshRemoteList()
     {
