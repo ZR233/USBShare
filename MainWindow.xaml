@@ -21,8 +21,6 @@
             <AppBarSeparator />
             <AppBarButton x:Name="StartShareButton" Label="开始分享" Icon="Play" Click="StartShareButton_Click" />
             <AppBarButton x:Name="StopShareButton" Label="停止分享" Icon="Stop" Click="StopShareButton_Click" IsEnabled="False" />
-            <AppBarSeparator />
-            <AppBarButton Label="管理员重启" Icon="Admin" Click="RestartAsAdminButton_Click" />
         </CommandBar>
 
         <Grid Grid.Row="1" ColumnDefinitions="360,*" ColumnSpacing="12">

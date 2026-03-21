@@ -1,4 +1,4 @@
-using Microsoft.UI.Xaml;
+﻿using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using USBShare.Models;
 using USBShare.Services;
@@ -55,24 +55,16 @@ public sealed partial class MainWindow : Window
         AutoStartToggle.IsOn = _config.Settings.AutoStart;
 
         _isAdmin = _adminService.IsRunningAsAdministrator();
-        if (!_isAdmin)
+        if (_isAdmin)
         {
-#if DEBUG
-            AdminHintTextBlock.Text = "Debug 模式下不会自动提权。请以管理员方式启动 VS 或程序后再开始分享。";
-#else
-            if (_adminService.TryRelaunchAsAdministrator(out _))
-            {
-                App.Current.Exit();
-                return;
-            }
-
-            AdminHintTextBlock.Text = "当前未获得管理员权限，无法执行 usbipd bind/unbind。请点击“管理员重启”。";
-#endif
-            StartShareButton.IsEnabled = false;
+            AdminHintTextBlock.Text = "管理员权限已就绪。";
         }
         else
         {
-            AdminHintTextBlock.Text = "管理员权限已就绪。";
+            // requireAdministrator in app.manifest should prevent reaching here for packaged apps.
+            // This is a defensive fallback (e.g., UAC declined, or a restricted test environment).
+            AdminHintTextBlock.Text = "未获得管理员权限，无法执行 usbipd bind/unbind 操作。";
+            StartShareButton.IsEnabled = false;
         }
 
         await RefreshTopologyAsync();
@@ -415,22 +407,6 @@ public sealed partial class MainWindow : Window
         {
             SetStatus($"停止失败: {ex.Message}", InfoBarSeverity.Error);
         }
-    }
-
-    private void RestartAsAdminButton_Click(object sender, RoutedEventArgs e)
-    {
-#if DEBUG
-        SetStatus("Debug 模式下不执行真实提权重启。请手动以管理员方式启动。", InfoBarSeverity.Informational);
-        return;
-#else
-        if (_adminService.TryRelaunchAsAdministrator(out var error))
-        {
-            App.Current.Exit();
-            return;
-        }
-
-        SetStatus($"管理员重启失败: {error}", InfoBarSeverity.Error);
-#endif
     }
 
     private void RemoteListView_SelectionChanged(object sender, SelectionChangedEventArgs e)

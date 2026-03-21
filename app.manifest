@@ -2,8 +2,9 @@
 <assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
   <assemblyIdentity version="1.0.0.0" name="USBShare.app"/>
 
-  <!-- Request administrator elevation. Package.appxmanifest declares runFullTrust
-       which allows MSIX-packaged apps to use requireAdministrator. -->
+  <!-- requireAdministrator: the OS shows a UAC prompt at launch and runs the process
+       with an elevated token. Package.appxmanifest declares runFullTrust, which is
+       the prerequisite for this to work in the MSIX / Store context. -->
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
     <security>
       <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
