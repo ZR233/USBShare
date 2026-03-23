@@ -2,9 +2,9 @@
 <assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
   <assemblyIdentity version="1.0.0.0" name="USBShare.app"/>
 
-  <!-- requireAdministrator: the OS shows a UAC prompt at launch and runs the process
-       with an elevated token. Package.appxmanifest declares runFullTrust, which is
-       the prerequisite for this to work in the MSIX / Store context. -->
+  <!-- requireAdministrator: launching the packaged app triggers a UAC prompt.
+       This matches the official allowElevation capability declared in
+       Package.appxmanifest and is required for usbipd bind/unbind. -->
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
     <security>
       <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">

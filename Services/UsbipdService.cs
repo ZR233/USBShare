@@ -26,10 +26,12 @@ public sealed class UsbipdService : IUsbipdService
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private readonly IProcessRunner _processRunner;
+    private readonly IProcessRunner _elevatedRunner;
 
-    public UsbipdService(IProcessRunner processRunner)
+    public UsbipdService(IProcessRunner processRunner, IProcessRunner? elevatedProcessRunner = null)
     {
         _processRunner = processRunner;
+        _elevatedRunner = elevatedProcessRunner ?? processRunner;
     }
 
     public async Task<UsbipStateSnapshot> GetStateAsync(CancellationToken cancellationToken = default)
@@ -63,7 +65,10 @@ public sealed class UsbipdService : IUsbipdService
 
     public async Task<UsbipBindResult> EnsureBoundAsync(string busId, CancellationToken cancellationToken = default)
     {
-        var result = await _processRunner
+        var runner = _elevatedRunner is IElevatedProcessRunner { IsRunning: true }
+            ? _elevatedRunner
+            : _processRunner;
+        var result = await runner
             .RunAsync("usbipd", $"bind --busid {busId}", timeout: TimeSpan.FromSeconds(20), cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 
@@ -98,7 +103,10 @@ public sealed class UsbipdService : IUsbipdService
 
     public async Task<UsbipCommandResult> UnbindAsync(string busId, CancellationToken cancellationToken = default)
     {
-        var result = await _processRunner
+        var runner = _elevatedRunner is IElevatedProcessRunner { IsRunning: true }
+            ? _elevatedRunner
+            : _processRunner;
+        var result = await runner
             .RunAsync("usbipd", $"unbind --busid {busId}", timeout: TimeSpan.FromSeconds(20), cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 

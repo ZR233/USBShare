@@ -61,8 +61,6 @@ public sealed partial class MainWindow : Window
         }
         else
         {
-            // requireAdministrator in app.manifest should prevent reaching here for packaged apps.
-            // This is a defensive fallback (e.g., UAC declined, or a restricted test environment).
             AdminHintTextBlock.Text = "未获得管理员权限，无法执行 usbipd bind/unbind 操作。";
             StartShareButton.IsEnabled = false;
         }

@@ -18,6 +18,7 @@ public sealed class ShareOrchestrator : IShareOrchestrator
     private readonly IUsbTopologyService _usbTopologyService;
     private readonly IDeviceEnabledResolver _deviceEnabledResolver;
     private readonly ISecretStore _secretStore;
+    private readonly IElevatedProcessRunner? _elevatedRunner;
     private readonly SemaphoreSlim _stateLock = new(1, 1);
     private readonly SemaphoreSlim _cycleLock = new(1, 1);
     private readonly HashSet<string> _attachedBusIds = new(StringComparer.OrdinalIgnoreCase);
@@ -34,12 +35,14 @@ public sealed class ShareOrchestrator : IShareOrchestrator
         IUsbipdService usbipdService,
         IUsbTopologyService usbTopologyService,
         IDeviceEnabledResolver deviceEnabledResolver,
-        ISecretStore secretStore)
+        ISecretStore secretStore,
+        IElevatedProcessRunner? elevatedRunner = null)
     {
         _usbipdService = usbipdService;
         _usbTopologyService = usbTopologyService;
         _deviceEnabledResolver = deviceEnabledResolver;
         _secretStore = secretStore;
+        _elevatedRunner = elevatedRunner;
     }
 
     public bool IsRunning => _loopTask is { IsCompleted: false };
@@ -78,6 +81,12 @@ public sealed class ShareOrchestrator : IShareOrchestrator
             if (_loopTask is { IsCompleted: false })
             {
                 return;
+            }
+
+            // Start the elevated helper process for admin operations (single UAC prompt).
+            if (_elevatedRunner is not null && !_elevatedRunner.IsRunning)
+            {
+                await _elevatedRunner.StartAsync(cancellationToken).ConfigureAwait(false);
             }
 
             _loopCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -149,6 +158,12 @@ public sealed class ShareOrchestrator : IShareOrchestrator
         }
 
         await RollbackSessionResourcesAsync(cancellationToken).ConfigureAwait(false);
+
+        // Stop the elevated helper process.
+        if (_elevatedRunner is not null)
+        {
+            await _elevatedRunner.StopAsync().ConfigureAwait(false);
+        }
 
         await _stateLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
