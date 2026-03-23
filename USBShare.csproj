@@ -38,10 +38,6 @@
     <None Remove="tests\**\*" />
     <Content Remove="tests\**\*" />
     <EmbeddedResource Remove="tests\**\*" />
-    <Compile Remove="ElevatedHelper\**\*.cs" />
-    <None Remove="ElevatedHelper\**\*" />
-    <Content Remove="ElevatedHelper\**\*" />
-    <EmbeddedResource Remove="ElevatedHelper\**\*" />
   </ItemGroup>
 
   <!--
@@ -51,9 +47,6 @@
   -->
   <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
     <ProjectCapability Include="Msix" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="ElevatedHelper\USBShare.ElevatedHelper.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.7705" />
@@ -85,7 +78,7 @@
     <AppxAutoIncrementPackageRevision>True</AppxAutoIncrementPackageRevision>
     <GenerateTestArtifacts>True</GenerateTestArtifacts>
     <AppxBundle>Auto</AppxBundle>
-    <AppxBundlePlatforms>x64</AppxBundlePlatforms>
+    <AppxBundlePlatforms>x86|x64|arm64</AppxBundlePlatforms>
     <GenerateTemporaryStoreCertificate>True</GenerateTemporaryStoreCertificate>
     <HoursBetweenUpdateChecks>0</HoursBetweenUpdateChecks>
   </PropertyGroup>

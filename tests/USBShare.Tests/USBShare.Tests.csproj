@@ -26,7 +26,6 @@
     <Compile Include="..\..\Models\UsbipListResult.cs" Link="Shared\Models\UsbipListResult.cs" />
     <Compile Include="..\..\Models\UsbipStateSnapshot.cs" Link="Shared\Models\UsbipStateSnapshot.cs" />
     <Compile Include="..\..\Services\DeviceEnabledResolver.cs" Link="Shared\Services\DeviceEnabledResolver.cs" />
-    <Compile Include="..\..\Services\ElevatedProcessRunner.cs" Link="Shared\Services\ElevatedProcessRunner.cs" />
     <Compile Include="..\..\Services\PnpDeviceService.cs" Link="Shared\Services\PnpDeviceService.cs" />
     <Compile Include="..\..\Services\ProcessRunner.cs" Link="Shared\Services\ProcessRunner.cs" />
     <Compile Include="..\..\Services\UsbTopologyService.cs" Link="Shared\Services\UsbTopologyService.cs" />

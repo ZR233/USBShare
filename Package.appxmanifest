@@ -10,7 +10,7 @@
   <Identity
     Name="49E51C4F.USBShare"
     Publisher="CN=0FC81167-3DEA-4950-89C3-0E113BD0A795"
-    Version="1.0.2.0" />
+    Version="1.0.3.0" />
 
   <Properties>
     <DisplayName>USBShare</DisplayName>

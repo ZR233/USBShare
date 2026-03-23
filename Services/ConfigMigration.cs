@@ -7,13 +7,27 @@ namespace USBShare.Services;
 /// </summary>
 public static class ConfigMigration
 {
+#pragma warning disable CS0618
+    private static List<ShareRule>? GetLegacyShareRules(AppConfig config)
+    {
+        return config.ShareRules;
+    }
+#pragma warning restore CS0618
+
+    private static void ClearLegacyShareRules(AppConfig config)
+    {
+#pragma warning disable CS0618
+        config.ShareRules = null;
+#pragma warning restore CS0618
+    }
+
     /// <summary>
     /// 检查配置是否需要迁移。
     /// </summary>
     public static bool NeedsMigration(AppConfig config)
     {
         // 如果没有 EnabledDevices 但有旧的 ShareRules，则需要迁移
-        return (config.EnabledDevices.Count == 0) && (config.ShareRules?.Count > 0);
+        return (config.EnabledDevices.Count == 0) && (GetLegacyShareRules(config)?.Count > 0);
     }
 
     /// <summary>
@@ -28,7 +42,7 @@ public static class ConfigMigration
             return;
         }
 
-        var oldRules = config.ShareRules;
+        var oldRules = GetLegacyShareRules(config);
         if (oldRules is null || oldRules.Count == 0)
         {
             return;
@@ -83,6 +97,6 @@ public static class ConfigMigration
         config.EnabledDevices = enabledDevices;
 
         // 可选：清除旧规则以释放空间
-        config.ShareRules = null;
+        ClearLegacyShareRules(config);
     }
 }
