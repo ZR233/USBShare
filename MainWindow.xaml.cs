@@ -13,16 +13,21 @@ public sealed partial class MainWindow : Window
     private readonly IProcessRunner _processRunner = new ProcessRunner();
     private readonly IAdminService _adminService = new AdminService();
     private readonly IShareOrchestrator _orchestrator;
+    private readonly IUsbipdPrerequisiteService _usbipdPrerequisiteService;
     private readonly IUsbipdService _usbipdService;
     private readonly IUsbTopologyService _usbTopologyService;
     private readonly Dictionary<string, UsbTreeItemViewModel> _treeByInstanceId = new(StringComparer.OrdinalIgnoreCase);
 
     private AppConfig _config = new();
     private UsbTopologySnapshot _topology = new();
+    private UsbipdPrerequisiteStatus _usbipdPrerequisiteStatus = new() { State = UsbipdInstallState.Missing };
     private ShareSessionState _sessionState = new();
     private UsbTreeItemViewModel? _selectedNode;
     private bool _isAdmin;
+    private bool _isUsbipdAutoInstallInProgress;
     private bool _isInitializingLanguageSelection;
+    private bool _hasShownUsbipdMissingDialog;
+    private CancellationTokenSource? _usbipdInstallMonitorCts;
     private RemoteConfig? _selectedRemote;
 
     public MainWindow()
@@ -30,6 +35,7 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         ApplyLocalizedStaticText();
 
+        _usbipdPrerequisiteService = new UsbipdPrerequisiteService(_processRunner);
         _usbipdService = new UsbipdService(_processRunner);
         _usbTopologyService = new UsbTopologyService(new PnpDeviceService(), _usbipdService);
         _orchestrator = new ShareOrchestrator(
@@ -65,10 +71,11 @@ public sealed partial class MainWindow : Window
         else
         {
             AdminHintTextBlock.Text = LocalizationService.GetString("Status.AdminRequired");
-            StartShareButton.IsEnabled = false;
         }
 
-        await RefreshTopologyAsync();
+        UpdateShareButtonState();
+        await EnsureUsbipdPrerequisiteAsync(showDialogIfMissing: true, notifyIfMissing: true);
+        await RefreshTopologyAsync(skipPrerequisiteCheck: true);
         await TryAutoStartAsync();
     }
 
@@ -90,6 +97,9 @@ public sealed partial class MainWindow : Window
         LanguageLabelTextBlock.Text = LocalizationService.GetString("LanguageLabel.Text");
         LanguageRestartHintTextBlock.Text = LocalizationService.GetString("LanguageRestartHintTextBlock.Text");
         UsbShareSectionTitleTextBlock.Text = LocalizationService.GetString("UsbShareSectionTitle.Text");
+        UsbipdPrerequisiteTitleTextBlock.Text = LocalizationService.GetString("UsbipdPrerequisite.Title");
+        AutoInstallUsbipdButton.Content = LocalizationService.GetString("Usbipd.AutoInstallButton.Content");
+        ManualInstallUsbipdButton.Content = LocalizationService.GetString("Usbipd.ManualInstallButton.Content");
         StatusInfoBar.Message = LocalizationService.GetString("StatusInfoBar.Message");
         BottomHintTextBlock.Text = LocalizationService.GetString("BottomHintTextBlock.Text");
     }
@@ -98,6 +108,7 @@ public sealed partial class MainWindow : Window
     {
         try
         {
+            _usbipdInstallMonitorCts?.Cancel();
             await _orchestrator.StopAsync();
         }
         catch
@@ -119,6 +130,7 @@ public sealed partial class MainWindow : Window
     private bool CanAutoStart() =>
         _config.Settings.AutoStart &&
         _isAdmin &&
+        _usbipdPrerequisiteStatus.IsReady &&
         _config.Settings.SelectedRemoteId.HasValue &&
         _config.Remotes.Any(r => r.Id == _config.Settings.SelectedRemoteId!.Value) &&
         _config.EnabledDevices.Any(e => e.Enabled);
@@ -133,12 +145,12 @@ public sealed partial class MainWindow : Window
         try
         {
             await _orchestrator.StartAsync(_config);
-            StartShareButton.IsEnabled = false;
-            StopShareButton.IsEnabled = true;
+            UpdateShareButtonState();
             SetLocalizedStatus("Status.AutoStarted", InfoBarSeverity.Success);
         }
         catch (Exception ex)
         {
+            UpdateShareButtonState();
             SetLocalizedStatus("Status.AutoStartFailed", InfoBarSeverity.Error, ex.Message);
         }
     }
@@ -210,10 +222,35 @@ public sealed partial class MainWindow : Window
         {
             CurrentTargetTextBlock.Text = LocalizationService.GetString("Status.TargetNone");
         }
+
+        UpdateShareButtonState();
     }
 
     private async Task RefreshTopologyAsync()
     {
+        await RefreshTopologyAsync(skipPrerequisiteCheck: false);
+    }
+
+    private async Task RefreshTopologyAsync(bool skipPrerequisiteCheck)
+    {
+        if (!skipPrerequisiteCheck)
+        {
+            var ready = await EnsureUsbipdPrerequisiteAsync(showDialogIfMissing: false, notifyIfMissing: true);
+            if (!ready)
+            {
+                UsbTreeView.RootNodes.Clear();
+                _treeByInstanceId.Clear();
+                return;
+            }
+        }
+
+        if (!_usbipdPrerequisiteStatus.IsReady)
+        {
+            UsbTreeView.RootNodes.Clear();
+            _treeByInstanceId.Clear();
+            return;
+        }
+
         SetLocalizedStatus("Status.ScanStarting", InfoBarSeverity.Informational);
 
         try
@@ -383,6 +420,8 @@ public sealed partial class MainWindow : Window
         {
             vm.UpdateShareStatus();
         }
+
+        UpdatePrimaryActionGuide();
     }
 
     private bool HasEnabledAncestorHub(UsbTreeItemViewModel vm, HashSet<string> enabledHubIds)
@@ -435,11 +474,24 @@ public sealed partial class MainWindow : Window
 
     private async void RefreshButton_Click(object sender, RoutedEventArgs e)
     {
-        await RefreshTopologyAsync();
+        var ready = await EnsureUsbipdPrerequisiteAsync(showDialogIfMissing: false, notifyIfMissing: true);
+        if (!ready)
+        {
+            return;
+        }
+
+        await RefreshTopologyAsync(skipPrerequisiteCheck: true);
     }
 
     private async void StartShareButton_Click(object sender, RoutedEventArgs e)
     {
+        var ready = await EnsureUsbipdPrerequisiteAsync(showDialogIfMissing: true, notifyIfMissing: true);
+        if (!ready)
+        {
+            SetLocalizedStatus("Status.UsbipdStartBlocked", InfoBarSeverity.Warning);
+            return;
+        }
+
         if (!_isAdmin)
         {
             SetLocalizedStatus("Status.StartRequiresAdmin", InfoBarSeverity.Warning);
@@ -455,8 +507,7 @@ public sealed partial class MainWindow : Window
         try
         {
             await _orchestrator.StartAsync(_config);
-            StartShareButton.IsEnabled = false;
-            StopShareButton.IsEnabled = true;
+            UpdateShareButtonState();
             SetLocalizedStatus("Status.OrchestratorStarted", InfoBarSeverity.Success);
         }
         catch (Exception ex)
@@ -470,10 +521,9 @@ public sealed partial class MainWindow : Window
         try
         {
             await _orchestrator.StopAsync();
-            StartShareButton.IsEnabled = _isAdmin;
-            StopShareButton.IsEnabled = false;
+            UpdateShareButtonState();
             SetLocalizedStatus("Status.Stopped", InfoBarSeverity.Informational);
-            await RefreshTopologyAsync();
+            await RefreshTopologyAsync(skipPrerequisiteCheck: true);
         }
         catch (Exception ex)
         {
@@ -709,7 +759,260 @@ public sealed partial class MainWindow : Window
                 var latestError = state.LastErrorsByKey.Last();
                 SetLocalizedStatus("Status.RuntimeWarning", InfoBarSeverity.Warning, latestError.Value);
             }
+
+            UpdateShareButtonState();
         });
+    }
+
+    private void UpdateShareButtonState()
+    {
+        StartShareButton.IsEnabled = !_orchestrator.IsRunning && _isAdmin && _usbipdPrerequisiteStatus.IsReady && HasSelectedTarget();
+        StopShareButton.IsEnabled = _orchestrator.IsRunning;
+        StartShareButton.Opacity = _orchestrator.IsRunning ? 0.8 : 1.0;
+        StopShareButton.Opacity = _orchestrator.IsRunning ? 1.0 : 0.8;
+        UpdatePrimaryActionGuide();
+    }
+
+    private bool HasSelectedTarget()
+    {
+        return _config.Settings.SelectedRemoteId.HasValue &&
+               _config.Remotes.Any(r => r.Id == _config.Settings.SelectedRemoteId.Value);
+    }
+
+    private async Task<bool> EnsureUsbipdPrerequisiteAsync(bool showDialogIfMissing, bool notifyIfMissing)
+    {
+        _usbipdPrerequisiteStatus = await _usbipdPrerequisiteService.CheckAsync();
+        UpdateUsbipdPrerequisiteUi();
+        UpdateShareButtonState();
+
+        if (_usbipdPrerequisiteStatus.IsReady)
+        {
+            return true;
+        }
+
+        if (notifyIfMissing)
+        {
+            SetLocalizedStatus(
+                _usbipdPrerequisiteStatus.State == UsbipdInstallState.Unavailable
+                    ? "Status.UsbipdUnavailable"
+                    : "Status.UsbipdMissing",
+                InfoBarSeverity.Warning);
+        }
+
+        if (showDialogIfMissing && !_hasShownUsbipdMissingDialog)
+        {
+            _hasShownUsbipdMissingDialog = true;
+            await ShowUsbipdMissingDialogAsync();
+        }
+
+        return false;
+    }
+
+    private void UpdateUsbipdPrerequisiteUi()
+    {
+        if (_usbipdPrerequisiteStatus.IsReady)
+        {
+            UsbipdPrerequisiteBorder.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        UsbipdPrerequisiteBorder.Visibility = Visibility.Visible;
+        UsbipdPrerequisiteTitleTextBlock.Text = LocalizationService.GetString("UsbipdPrerequisite.Title");
+
+        string message;
+        if (_isUsbipdAutoInstallInProgress)
+        {
+            message = LocalizationService.GetString("UsbipdPrerequisite.MessageWaiting");
+        }
+        else
+        {
+            message = _usbipdPrerequisiteStatus.State == UsbipdInstallState.Unavailable
+                ? LocalizationService.GetString("UsbipdPrerequisite.MessageUnavailable")
+                : LocalizationService.GetString("UsbipdPrerequisite.MessageMissing");
+        }
+
+        if (!_usbipdPrerequisiteStatus.WingetAvailable)
+        {
+            message = $"{message} {LocalizationService.GetString("UsbipdPrerequisite.WingetUnavailable")}".Trim();
+        }
+
+        UsbipdPrerequisiteTextBlock.Text = message;
+        AutoInstallUsbipdButton.IsEnabled = !_isUsbipdAutoInstallInProgress && _usbipdPrerequisiteStatus.WingetAvailable;
+        ManualInstallUsbipdButton.IsEnabled = true;
+        UpdatePrimaryActionGuide();
+    }
+
+    private async Task ShowUsbipdMissingDialogAsync()
+    {
+        var dialog = new ContentDialog
+        {
+            XamlRoot = RootGrid.XamlRoot,
+            Title = LocalizationService.GetString("Dialog.UsbipdMissing.Title"),
+            Content = BuildUsbipdMissingDialogContent(),
+            DefaultButton = ContentDialogButton.Primary,
+            CloseButtonText = LocalizationService.GetString("Dialog.Common.Cancel"),
+        };
+
+        if (_usbipdPrerequisiteStatus.WingetAvailable)
+        {
+            dialog.PrimaryButtonText = LocalizationService.GetString("Usbipd.AutoInstallButton.Content");
+            dialog.SecondaryButtonText = LocalizationService.GetString("Usbipd.ManualInstallButton.Content");
+        }
+        else
+        {
+            dialog.PrimaryButtonText = LocalizationService.GetString("Usbipd.ManualInstallButton.Content");
+        }
+
+        var result = await dialog.ShowAsync();
+        if (result == ContentDialogResult.Primary)
+        {
+            if (_usbipdPrerequisiteStatus.WingetAvailable)
+            {
+                await StartUsbipdAutoInstallAsync();
+            }
+            else
+            {
+                await OpenUsbipdManualInstallAsync();
+            }
+        }
+        else if (result == ContentDialogResult.Secondary)
+        {
+            await OpenUsbipdManualInstallAsync();
+        }
+    }
+
+    private object BuildUsbipdMissingDialogContent()
+    {
+        var key = _usbipdPrerequisiteStatus.State == UsbipdInstallState.Unavailable
+            ? "Dialog.UsbipdMissing.ContentUnavailable"
+            : "Dialog.UsbipdMissing.ContentMissing";
+        var text = LocalizationService.GetString(key);
+
+        if (!_usbipdPrerequisiteStatus.WingetAvailable)
+        {
+            text = $"{text} {LocalizationService.GetString("UsbipdPrerequisite.WingetUnavailable")}".Trim();
+        }
+
+        return new TextBlock
+        {
+            Text = text,
+            TextWrapping = TextWrapping.WrapWholeWords,
+        };
+    }
+
+    private async void AutoInstallUsbipdButton_Click(object sender, RoutedEventArgs e)
+    {
+        await StartUsbipdAutoInstallAsync();
+    }
+
+    private async void ManualInstallUsbipdButton_Click(object sender, RoutedEventArgs e)
+    {
+        await OpenUsbipdManualInstallAsync();
+    }
+
+    private async Task StartUsbipdAutoInstallAsync()
+    {
+        if (!_usbipdPrerequisiteStatus.WingetAvailable)
+        {
+            SetLocalizedStatus("Status.WingetUnavailable", InfoBarSeverity.Warning);
+            await OpenUsbipdManualInstallAsync();
+            return;
+        }
+
+        var launched = _usbipdPrerequisiteService.TryLaunchWingetInstall();
+        if (!launched)
+        {
+            SetLocalizedStatus("Status.UsbipdAutoInstallLaunchFailed", InfoBarSeverity.Error);
+            await OpenUsbipdManualInstallAsync();
+            return;
+        }
+
+        SetLocalizedStatus("Status.UsbipdInstallStarted", InfoBarSeverity.Informational);
+        StartUsbipdInstallMonitoring();
+    }
+
+    private async Task OpenUsbipdManualInstallAsync()
+    {
+        var opened = _usbipdPrerequisiteService.OpenOfficialInstallPage();
+        if (!opened)
+        {
+            SetLocalizedStatus("Status.UsbipdManualInstallOpenFailed", InfoBarSeverity.Error);
+            return;
+        }
+
+        SetLocalizedStatus("Status.UsbipdManualInstallOpened", InfoBarSeverity.Informational);
+        await Task.CompletedTask;
+    }
+
+    private void StartUsbipdInstallMonitoring()
+    {
+        _usbipdInstallMonitorCts?.Cancel();
+        _usbipdInstallMonitorCts?.Dispose();
+        _usbipdInstallMonitorCts = new CancellationTokenSource();
+        _isUsbipdAutoInstallInProgress = true;
+        UpdateUsbipdPrerequisiteUi();
+        _ = MonitorUsbipdInstallAsync(_usbipdInstallMonitorCts.Token);
+    }
+
+    private async Task MonitorUsbipdInstallAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var status = await _usbipdPrerequisiteService
+                .WaitForInstalledAsync(TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(3), cancellationToken)
+                .ConfigureAwait(false);
+
+            await EnqueueOnUiThreadAsync(async () =>
+            {
+                _isUsbipdAutoInstallInProgress = false;
+                _usbipdPrerequisiteStatus = status;
+                UpdateUsbipdPrerequisiteUi();
+                UpdateShareButtonState();
+
+                if (status.IsReady)
+                {
+                    SetLocalizedStatus("Status.UsbipdInstallDetected", InfoBarSeverity.Success);
+                    await RefreshTopologyAsync(skipPrerequisiteCheck: true);
+                }
+                else
+                {
+                    SetLocalizedStatus("Status.UsbipdInstallTimedOut", InfoBarSeverity.Warning);
+                }
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            // Ignore cancelled monitoring.
+        }
+    }
+
+    private Task EnqueueOnUiThreadAsync(Func<Task> action)
+    {
+        if (DispatcherQueue is null)
+        {
+            return action();
+        }
+
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var enqueued = DispatcherQueue.TryEnqueue(async () =>
+        {
+            try
+            {
+                await action().ConfigureAwait(false);
+                tcs.TrySetResult();
+            }
+            catch (Exception ex)
+            {
+                tcs.TrySetException(ex);
+            }
+        });
+
+        if (!enqueued)
+        {
+            tcs.TrySetException(new InvalidOperationException("Failed to enqueue action on UI thread."));
+        }
+
+        return tcs.Task;
     }
 
     /// <summary>
@@ -963,12 +1266,82 @@ public sealed partial class MainWindow : Window
         });
     }
 
+    private void UpdatePrimaryActionGuide()
+    {
+        var content = BuildPrimaryActionGuideContent();
+        BottomHintTextBlock.Text = $"{content.Title}: {content.Description} {content.Summary}".Trim();
+    }
+
+    private PrimaryActionGuideContent BuildPrimaryActionGuideContent()
+    {
+        var enabledDeviceCount = _config.EnabledDevices.Count(device => device.Enabled);
+        var targetLabel = HasSelectedTarget()
+            ? _config.Remotes.First(remote => remote.Id == _config.Settings.SelectedRemoteId!.Value).DisplayTitle
+            : LocalizationService.GetString("Status.TargetNone");
+        var summary = LocalizationService.Format("ActionGuide.Summary.TargetAndDeviceCount", targetLabel, enabledDeviceCount);
+
+        if (_orchestrator.IsRunning)
+        {
+            return new PrimaryActionGuideContent(
+                PrimaryActionGuideKind.Running,
+                LocalizationService.GetString("ActionGuide.Title.Running"),
+                LocalizationService.GetString("ActionGuide.Description.Running"),
+                summary);
+        }
+
+        if (!_usbipdPrerequisiteStatus.IsReady)
+        {
+            return new PrimaryActionGuideContent(
+                PrimaryActionGuideKind.Blocked,
+                LocalizationService.GetString("ActionGuide.Title.Usbipd"),
+                LocalizationService.GetString("ActionGuide.Description.Usbipd"),
+                summary);
+        }
+
+        if (!_isAdmin)
+        {
+            return new PrimaryActionGuideContent(
+                PrimaryActionGuideKind.Blocked,
+                LocalizationService.GetString("ActionGuide.Title.Admin"),
+                LocalizationService.GetString("ActionGuide.Description.Admin"),
+                summary);
+        }
+
+        if (!HasSelectedTarget())
+        {
+            return new PrimaryActionGuideContent(
+                PrimaryActionGuideKind.Blocked,
+                LocalizationService.GetString("ActionGuide.Title.Target"),
+                LocalizationService.GetString("ActionGuide.Description.Target"),
+                summary);
+        }
+
+        return new PrimaryActionGuideContent(
+            PrimaryActionGuideKind.Ready,
+            LocalizationService.GetString("ActionGuide.Title.Ready"),
+            LocalizationService.GetString("ActionGuide.Description.Ready"),
+            summary);
+    }
+
     private sealed class RemoteEditorResult
     {
         public required RemoteConfig Remote { get; init; }
         public string? SshSecret { get; init; }
         public string? SudoSecret { get; init; }
     }
+
+    private enum PrimaryActionGuideKind
+    {
+        Ready,
+        Running,
+        Blocked,
+    }
+
+    private sealed record PrimaryActionGuideContent(
+        PrimaryActionGuideKind Kind,
+        string Title,
+        string Description,
+        string Summary);
 
     private sealed record LanguageOption(string Value, string Label);
 

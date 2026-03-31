@@ -17,7 +17,9 @@
   <data name="PackageDescription" xml:space="preserve"><value>启动时需要管理员权限，以执行 usbipd-win 的 bind 和 unbind 操作。</value></data>
   <data name="RefreshButton.Label" xml:space="preserve"><value>刷新</value></data>
   <data name="StartShareButton.Label" xml:space="preserve"><value>开始分享</value></data>
+  <data name="StartShareButton.AutomationName" xml:space="preserve"><value>开始分享 USB 设备</value></data>
   <data name="StopShareButton.Label" xml:space="preserve"><value>停止分享</value></data>
+  <data name="StopShareButton.AutomationName" xml:space="preserve"><value>停止分享并回滚当前会话</value></data>
   <data name="RemoteSectionTitle.Text" xml:space="preserve"><value>SSH 远程配置</value></data>
   <data name="CurrentTargetLabel.Text" xml:space="preserve"><value>当前分享目标</value></data>
   <data name="CurrentTargetTextBlock.Text" xml:space="preserve"><value>未选择</value></data>
@@ -68,6 +70,16 @@
   <data name="Status.DeviceDisabled" xml:space="preserve"><value>设备已禁用分享。</value></data>
   <data name="Status.RuntimeWarning" xml:space="preserve"><value>运行告警: {0}</value></data>
   <data name="Status.LanguageSavedRestart" xml:space="preserve"><value>语言设置已保存，重启应用后生效。</value></data>
+  <data name="Status.UsbipdMissing" xml:space="preserve"><value>未检测到 usbipd-win，请先安装后再使用 USB 分享。</value></data>
+  <data name="Status.UsbipdUnavailable" xml:space="preserve"><value>检测到 usbipd-win 安装异常或命令不可用，请修复后再使用 USB 分享。</value></data>
+  <data name="Status.UsbipdStartBlocked" xml:space="preserve"><value>当前无法开始分享，因为 usbipd-win 尚未就绪。</value></data>
+  <data name="Status.WingetUnavailable" xml:space="preserve"><value>当前系统未检测到 winget，无法自动安装 usbipd-win。</value></data>
+  <data name="Status.UsbipdAutoInstallLaunchFailed" xml:space="preserve"><value>无法启动 usbipd-win 自动安装程序，已为你打开官方安装页面。</value></data>
+  <data name="Status.UsbipdManualInstallOpenFailed" xml:space="preserve"><value>无法打开 usbipd-win 官方安装页面，请手动访问 GitHub 官方仓库安装。</value></data>
+  <data name="Status.UsbipdManualInstallOpened" xml:space="preserve"><value>已打开 usbipd-win 官方安装页面，安装完成后应用会自动重新检测。</value></data>
+  <data name="Status.UsbipdInstallStarted" xml:space="preserve"><value>已启动 usbipd-win 自动安装，正在等待安装完成并重新检测…</value></data>
+  <data name="Status.UsbipdInstallDetected" xml:space="preserve"><value>已检测到 usbipd-win，开始分享按钮已恢复可用。</value></data>
+  <data name="Status.UsbipdInstallTimedOut" xml:space="preserve"><value>暂未检测到 usbipd-win 安装完成，请安装完成后再次返回应用。</value></data>
   <data name="Dialog.RemoteEditor.NameHeader" xml:space="preserve"><value>名称</value></data>
   <data name="Dialog.RemoteEditor.HostHeader" xml:space="preserve"><value>Host</value></data>
   <data name="Dialog.RemoteEditor.PortHeader" xml:space="preserve"><value>SSH 端口</value></data>
@@ -80,6 +92,9 @@
   <data name="Dialog.RemoteEditor.SudoPasswordHeader" xml:space="preserve"><value>sudo密码(留空=不修改)</value></data>
   <data name="Dialog.RemoteEditor.AddTitle" xml:space="preserve"><value>新增远程</value></data>
   <data name="Dialog.RemoteEditor.EditTitle" xml:space="preserve"><value>编辑远程</value></data>
+  <data name="Dialog.UsbipdMissing.Title" xml:space="preserve"><value>需要安装 usbipd-win</value></data>
+  <data name="Dialog.UsbipdMissing.ContentMissing" xml:space="preserve"><value>当前系统未安装 usbipd-win。USBShare 依赖它来扫描设备并执行本地 USB 分享。你可以选择自动安装，或打开官方说明自行安装。安装完成后，应用会自动重新检测。</value></data>
+  <data name="Dialog.UsbipdMissing.ContentUnavailable" xml:space="preserve"><value>检测到 usbipd-win 可能已安装，但当前命令不可用。你可以尝试重新安装，或打开官方说明自行修复。安装完成后，应用会自动重新检测。</value></data>
   <data name="Validation.HostUserRequired" xml:space="preserve"><value>Host 和 用户名不能为空。</value></data>
   <data name="Validation.SshPortRange" xml:space="preserve"><value>SSH 端口必须在 1 到 65535 之间。</value></data>
   <data name="Validation.TunnelPortRange" xml:space="preserve"><value>远端映射端口必须在 1 到 65535 之间。</value></data>
@@ -87,6 +102,27 @@
   <data name="Language.Option.System" xml:space="preserve"><value>跟随系统</value></data>
   <data name="Language.Option.ZhCn" xml:space="preserve"><value>简体中文</value></data>
   <data name="Language.Option.EnUs" xml:space="preserve"><value>English</value></data>
+  <data name="UsbipdPrerequisite.Title" xml:space="preserve"><value>usbipd-win 未就绪</value></data>
+  <data name="UsbipdPrerequisite.MessageMissing" xml:space="preserve"><value>未检测到 usbipd-win。未安装前将无法扫描 USB 拓扑，也无法开始分享。</value></data>
+  <data name="UsbipdPrerequisite.MessageUnavailable" xml:space="preserve"><value>检测到 usbipd-win 处于异常状态或命令不可用。修复前将无法扫描 USB 拓扑，也无法开始分享。</value></data>
+  <data name="UsbipdPrerequisite.MessageWaiting" xml:space="preserve"><value>正在等待 usbipd-win 安装完成。检测通过后，应用会自动恢复开始分享并刷新设备拓扑。</value></data>
+  <data name="UsbipdPrerequisite.WingetUnavailable" xml:space="preserve"><value>当前系统未检测到 winget，因此自动安装按钮不可用。</value></data>
+  <data name="Usbipd.AutoInstallButton.Content" xml:space="preserve"><value>自动安装</value></data>
+  <data name="Usbipd.ManualInstallButton.Content" xml:space="preserve"><value>自行安装</value></data>
+  <data name="ActionGuide.Badge.Ready" xml:space="preserve"><value>下一步</value></data>
+  <data name="ActionGuide.Badge.Running" xml:space="preserve"><value>进行中</value></data>
+  <data name="ActionGuide.Badge.Blocked" xml:space="preserve"><value>待处理</value></data>
+  <data name="ActionGuide.Title.Ready" xml:space="preserve"><value>准备就绪</value></data>
+  <data name="ActionGuide.Description.Ready" xml:space="preserve"><value>已满足条件，可点击上方“开始分享”将启用的设备分享到当前目标。</value></data>
+  <data name="ActionGuide.Title.Running" xml:space="preserve"><value>分享进行中</value></data>
+  <data name="ActionGuide.Description.Running" xml:space="preserve"><value>如需回滚本地绑定和远程会话，可点击上方“停止分享”。</value></data>
+  <data name="ActionGuide.Title.Target" xml:space="preserve"><value>先选择分享目标</value></data>
+  <data name="ActionGuide.Description.Target" xml:space="preserve"><value>请先在左侧选择一个远程服务器并设为分享目标，然后再开始分享。</value></data>
+  <data name="ActionGuide.Title.Admin" xml:space="preserve"><value>需要管理员权限</value></data>
+  <data name="ActionGuide.Description.Admin" xml:space="preserve"><value>当前未获得管理员权限，开始分享前请以管理员身份启动应用。</value></data>
+  <data name="ActionGuide.Title.Usbipd" xml:space="preserve"><value>需要 usbipd-win</value></data>
+  <data name="ActionGuide.Description.Usbipd" xml:space="preserve"><value>请先安装或修复 usbipd-win，完成后即可开始分享。</value></data>
+  <data name="ActionGuide.Summary.TargetAndDeviceCount" xml:space="preserve"><value>当前目标: {0} | 已启用设备: {1}</value></data>
   <data name="AuthType.Password" xml:space="preserve"><value>密码</value></data>
   <data name="AuthType.PrivateKey" xml:space="preserve"><value>私钥</value></data>
   <data name="Tree.Subtitle.BusId" xml:space="preserve"><value>BusId: {0}</value></data>

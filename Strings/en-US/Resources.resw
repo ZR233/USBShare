@@ -17,7 +17,9 @@
   <data name="PackageDescription" xml:space="preserve"><value>Requires administrator permission on launch to run usbipd-win bind and unbind operations.</value></data>
   <data name="RefreshButton.Label" xml:space="preserve"><value>Refresh</value></data>
   <data name="StartShareButton.Label" xml:space="preserve"><value>Start Sharing</value></data>
+  <data name="StartShareButton.AutomationName" xml:space="preserve"><value>Start sharing USB devices</value></data>
   <data name="StopShareButton.Label" xml:space="preserve"><value>Stop Sharing</value></data>
+  <data name="StopShareButton.AutomationName" xml:space="preserve"><value>Stop sharing and roll back the current session</value></data>
   <data name="RemoteSectionTitle.Text" xml:space="preserve"><value>SSH Remote Configuration</value></data>
   <data name="CurrentTargetLabel.Text" xml:space="preserve"><value>Current Share Target</value></data>
   <data name="CurrentTargetTextBlock.Text" xml:space="preserve"><value>Not selected</value></data>
@@ -68,6 +70,16 @@
   <data name="Status.DeviceDisabled" xml:space="preserve"><value>Device sharing disabled.</value></data>
   <data name="Status.RuntimeWarning" xml:space="preserve"><value>Runtime warning: {0}</value></data>
   <data name="Status.LanguageSavedRestart" xml:space="preserve"><value>Language preference saved. Restart the app to apply it.</value></data>
+  <data name="Status.UsbipdMissing" xml:space="preserve"><value>usbipd-win was not detected. Install it before using USB sharing.</value></data>
+  <data name="Status.UsbipdUnavailable" xml:space="preserve"><value>usbipd-win appears to be installed, but the command is unavailable or unhealthy. Fix it before using USB sharing.</value></data>
+  <data name="Status.UsbipdStartBlocked" xml:space="preserve"><value>Sharing cannot start because usbipd-win is not ready.</value></data>
+  <data name="Status.WingetUnavailable" xml:space="preserve"><value>winget was not detected on this system, so automatic usbipd-win installation is unavailable.</value></data>
+  <data name="Status.UsbipdAutoInstallLaunchFailed" xml:space="preserve"><value>Failed to launch the automatic usbipd-win installer. The official install page has been opened instead.</value></data>
+  <data name="Status.UsbipdManualInstallOpenFailed" xml:space="preserve"><value>Failed to open the official usbipd-win install page. Please open the official GitHub repository manually.</value></data>
+  <data name="Status.UsbipdManualInstallOpened" xml:space="preserve"><value>The official usbipd-win install page is open. The app will automatically re-check after installation.</value></data>
+  <data name="Status.UsbipdInstallStarted" xml:space="preserve"><value>The usbipd-win installer has been launched. Waiting for installation to finish and re-checking...</value></data>
+  <data name="Status.UsbipdInstallDetected" xml:space="preserve"><value>usbipd-win was detected. Start Sharing is available again.</value></data>
+  <data name="Status.UsbipdInstallTimedOut" xml:space="preserve"><value>usbipd-win is still not detected. Return to the app after installation finishes.</value></data>
   <data name="Dialog.RemoteEditor.NameHeader" xml:space="preserve"><value>Name</value></data>
   <data name="Dialog.RemoteEditor.HostHeader" xml:space="preserve"><value>Host</value></data>
   <data name="Dialog.RemoteEditor.PortHeader" xml:space="preserve"><value>SSH Port</value></data>
@@ -80,6 +92,9 @@
   <data name="Dialog.RemoteEditor.SudoPasswordHeader" xml:space="preserve"><value>sudo Password (leave empty to keep unchanged)</value></data>
   <data name="Dialog.RemoteEditor.AddTitle" xml:space="preserve"><value>Add Remote</value></data>
   <data name="Dialog.RemoteEditor.EditTitle" xml:space="preserve"><value>Edit Remote</value></data>
+  <data name="Dialog.UsbipdMissing.Title" xml:space="preserve"><value>usbipd-win is required</value></data>
+  <data name="Dialog.UsbipdMissing.ContentMissing" xml:space="preserve"><value>usbipd-win is not installed on this PC. USBShare depends on it to scan USB devices and perform local USB sharing. You can install it automatically or open the official instructions and install it yourself. The app will re-check automatically after installation.</value></data>
+  <data name="Dialog.UsbipdMissing.ContentUnavailable" xml:space="preserve"><value>usbipd-win may be installed, but the command is currently unavailable. You can try reinstalling it automatically or open the official instructions and fix it manually. The app will re-check automatically after installation.</value></data>
   <data name="Validation.HostUserRequired" xml:space="preserve"><value>Host and username are required.</value></data>
   <data name="Validation.SshPortRange" xml:space="preserve"><value>SSH port must be between 1 and 65535.</value></data>
   <data name="Validation.TunnelPortRange" xml:space="preserve"><value>Remote tunnel port must be between 1 and 65535.</value></data>
@@ -87,6 +102,27 @@
   <data name="Language.Option.System" xml:space="preserve"><value>Follow system</value></data>
   <data name="Language.Option.ZhCn" xml:space="preserve"><value>简体中文</value></data>
   <data name="Language.Option.EnUs" xml:space="preserve"><value>English</value></data>
+  <data name="UsbipdPrerequisite.Title" xml:space="preserve"><value>usbipd-win is not ready</value></data>
+  <data name="UsbipdPrerequisite.MessageMissing" xml:space="preserve"><value>usbipd-win was not detected. Until it is installed, USB topology scanning and sharing will stay unavailable.</value></data>
+  <data name="UsbipdPrerequisite.MessageUnavailable" xml:space="preserve"><value>usbipd-win appears to be in an unhealthy state or the command is unavailable. USB topology scanning and sharing will stay unavailable until it is fixed.</value></data>
+  <data name="UsbipdPrerequisite.MessageWaiting" xml:space="preserve"><value>Waiting for usbipd-win installation to complete. Once detected, the app will automatically re-enable Start Sharing and refresh the device topology.</value></data>
+  <data name="UsbipdPrerequisite.WingetUnavailable" xml:space="preserve"><value>winget is not available on this system, so automatic installation is disabled.</value></data>
+  <data name="Usbipd.AutoInstallButton.Content" xml:space="preserve"><value>Install Automatically</value></data>
+  <data name="Usbipd.ManualInstallButton.Content" xml:space="preserve"><value>Install Manually</value></data>
+  <data name="ActionGuide.Badge.Ready" xml:space="preserve"><value>Next Step</value></data>
+  <data name="ActionGuide.Badge.Running" xml:space="preserve"><value>In Progress</value></data>
+  <data name="ActionGuide.Badge.Blocked" xml:space="preserve"><value>Action Needed</value></data>
+  <data name="ActionGuide.Title.Ready" xml:space="preserve"><value>Ready to share</value></data>
+  <data name="ActionGuide.Description.Ready" xml:space="preserve"><value>All required conditions are met. Click “Start Sharing” above to send enabled devices to the current target.</value></data>
+  <data name="ActionGuide.Title.Running" xml:space="preserve"><value>Sharing is active</value></data>
+  <data name="ActionGuide.Description.Running" xml:space="preserve"><value>Click “Stop Sharing” above if you want to roll back local bindings and the remote session.</value></data>
+  <data name="ActionGuide.Title.Target" xml:space="preserve"><value>Select a share target first</value></data>
+  <data name="ActionGuide.Description.Target" xml:space="preserve"><value>Select a remote server on the left and set it as the share target before starting.</value></data>
+  <data name="ActionGuide.Title.Admin" xml:space="preserve"><value>Administrator privileges required</value></data>
+  <data name="ActionGuide.Description.Admin" xml:space="preserve"><value>The app is not running with administrator privileges. Restart it as administrator before sharing.</value></data>
+  <data name="ActionGuide.Title.Usbipd" xml:space="preserve"><value>usbipd-win is required</value></data>
+  <data name="ActionGuide.Description.Usbipd" xml:space="preserve"><value>Install or repair usbipd-win before USB sharing can start.</value></data>
+  <data name="ActionGuide.Summary.TargetAndDeviceCount" xml:space="preserve"><value>Current target: {0} | Enabled devices: {1}</value></data>
   <data name="AuthType.Password" xml:space="preserve"><value>Password</value></data>
   <data name="AuthType.PrivateKey" xml:space="preserve"><value>Private key</value></data>
   <data name="Tree.Subtitle.BusId" xml:space="preserve"><value>BusId: {0}</value></data>

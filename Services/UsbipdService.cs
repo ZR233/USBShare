@@ -37,7 +37,7 @@ public sealed class UsbipdService : IUsbipdService
             throw new InvalidOperationException($"usbipd state failed: {MergeOutput(result)}");
         }
 
-        var snapshot = System.Text.Json.JsonSerializer.Deserialize(result.StandardOutput, AppJsonSerializerContext.Default.UsbipStateSnapshot);
+        var snapshot = System.Text.Json.JsonSerializer.Deserialize(result.StandardOutput, UsbipdJsonSerializerContext.Default.UsbipStateSnapshot);
         return snapshot ?? new UsbipStateSnapshot();
     }
 

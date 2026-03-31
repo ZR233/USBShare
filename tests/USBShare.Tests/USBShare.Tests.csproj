@@ -28,6 +28,8 @@
     <Compile Include="..\..\Services\DeviceEnabledResolver.cs" Link="Shared\Services\DeviceEnabledResolver.cs" />
     <Compile Include="..\..\Services\PnpDeviceService.cs" Link="Shared\Services\PnpDeviceService.cs" />
     <Compile Include="..\..\Services\ProcessRunner.cs" Link="Shared\Services\ProcessRunner.cs" />
+    <Compile Include="..\..\Services\UsbipdPrerequisiteService.cs" Link="Shared\Services\UsbipdPrerequisiteService.cs" />
+    <Compile Include="..\..\Services\UsbipdJsonSerializerContext.cs" Link="Shared\Services\UsbipdJsonSerializerContext.cs" />
     <Compile Include="..\..\Services\UsbTopologyService.cs" Link="Shared\Services\UsbTopologyService.cs" />
     <Compile Include="..\..\Services\UsbipdService.cs" Link="Shared\Services\UsbipdService.cs" />
     <Compile Include="..\..\Services\Native\CfgMgr32.cs" Link="Shared\Services\Native\CfgMgr32.cs" />
