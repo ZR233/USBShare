@@ -22,11 +22,13 @@ public sealed partial class MainWindow : Window
     private ShareSessionState _sessionState = new();
     private UsbTreeItemViewModel? _selectedNode;
     private bool _isAdmin;
+    private bool _isInitializingLanguageSelection;
     private RemoteConfig? _selectedRemote;
 
     public MainWindow()
     {
         InitializeComponent();
+        ApplyLocalizedStaticText();
 
         _usbipdService = new UsbipdService(_processRunner);
         _usbTopologyService = new UsbTopologyService(new PnpDeviceService(), _usbipdService);
@@ -53,20 +55,43 @@ public sealed partial class MainWindow : Window
         UpdateCurrentTargetDisplay();
         PollIntervalNumberBox.Value = _config.Settings.PollIntervalSeconds;
         AutoStartToggle.IsOn = _config.Settings.AutoStart;
+        InitializeLanguageOptions();
 
         _isAdmin = _adminService.IsRunningAsAdministrator();
         if (_isAdmin)
         {
-            AdminHintTextBlock.Text = "管理员权限已就绪。";
+            AdminHintTextBlock.Text = LocalizationService.GetString("Status.AdminReady");
         }
         else
         {
-            AdminHintTextBlock.Text = "未获得管理员权限，无法执行 usbipd bind/unbind 操作。";
+            AdminHintTextBlock.Text = LocalizationService.GetString("Status.AdminRequired");
             StartShareButton.IsEnabled = false;
         }
 
         await RefreshTopologyAsync();
         await TryAutoStartAsync();
+    }
+
+    private void ApplyLocalizedStaticText()
+    {
+        Title = LocalizationService.GetString("MainWindow.Title");
+        RefreshButton.Label = LocalizationService.GetString("RefreshButton.Label");
+        StartShareButton.Label = LocalizationService.GetString("StartShareButton.Label");
+        StopShareButton.Label = LocalizationService.GetString("StopShareButton.Label");
+        RemoteSectionTitleTextBlock.Text = LocalizationService.GetString("RemoteSectionTitle.Text");
+        CurrentTargetLabelTextBlock.Text = LocalizationService.GetString("CurrentTargetLabel.Text");
+        AddRemoteButton.Content = LocalizationService.GetString("AddRemoteButton.Content");
+        EditRemoteButton.Content = LocalizationService.GetString("EditRemoteButton.Content");
+        DeleteRemoteButton.Content = LocalizationService.GetString("DeleteRemoteButton.Content");
+        TestRemoteButton.Content = LocalizationService.GetString("TestRemoteButton.Content");
+        SetAsTargetButton.Content = LocalizationService.GetString("SetAsTargetButton.Content");
+        PollIntervalLabelTextBlock.Text = LocalizationService.GetString("PollIntervalLabel.Text");
+        AutoStartToggle.Header = LocalizationService.GetString("AutoStartToggle.Header");
+        LanguageLabelTextBlock.Text = LocalizationService.GetString("LanguageLabel.Text");
+        LanguageRestartHintTextBlock.Text = LocalizationService.GetString("LanguageRestartHintTextBlock.Text");
+        UsbShareSectionTitleTextBlock.Text = LocalizationService.GetString("UsbShareSectionTitle.Text");
+        StatusInfoBar.Message = LocalizationService.GetString("StatusInfoBar.Message");
+        BottomHintTextBlock.Text = LocalizationService.GetString("BottomHintTextBlock.Text");
     }
 
     private async void MainWindow_Closed(object sender, WindowEventArgs args)
@@ -86,6 +111,7 @@ public sealed partial class MainWindow : Window
         _config = await _configStore.LoadAsync();
         _config.Settings ??= new AppSettings();
         _config.Settings.PollIntervalSeconds = Math.Clamp(_config.Settings.PollIntervalSeconds, 1, 30);
+        _config.Settings.PreferredLanguage = LocalizationService.NormalizePreference(_config.Settings.PreferredLanguage);
     }
 
     private Task SaveConfigurationAsync() => _configStore.SaveAsync(_config);
@@ -109,11 +135,11 @@ public sealed partial class MainWindow : Window
             await _orchestrator.StartAsync(_config);
             StartShareButton.IsEnabled = false;
             StopShareButton.IsEnabled = true;
-            SetStatus("已自动开始分享。", InfoBarSeverity.Success);
+            SetLocalizedStatus("Status.AutoStarted", InfoBarSeverity.Success);
         }
         catch (Exception ex)
         {
-            SetStatus($"自动启动失败: {ex.Message}", InfoBarSeverity.Error);
+            SetLocalizedStatus("Status.AutoStartFailed", InfoBarSeverity.Error, ex.Message);
         }
     }
 
@@ -121,6 +147,47 @@ public sealed partial class MainWindow : Window
     {
         _config.Settings.AutoStart = AutoStartToggle.IsOn;
         await PersistAndPropagateConfigurationAsync();
+    }
+
+    private void InitializeLanguageOptions()
+    {
+        _isInitializingLanguageSelection = true;
+        try
+        {
+            var options = new List<LanguageOption>
+            {
+                new(LocalizationService.SystemLanguage, LocalizationService.GetString("Language.Option.System")),
+                new(LocalizationService.ChineseLanguage, LocalizationService.GetString("Language.Option.ZhCn")),
+                new(LocalizationService.EnglishLanguage, LocalizationService.GetString("Language.Option.EnUs")),
+            };
+
+            LanguageComboBox.DisplayMemberPath = nameof(LanguageOption.Label);
+            LanguageComboBox.ItemsSource = options;
+            LanguageComboBox.SelectedItem = options.FirstOrDefault(option =>
+                string.Equals(option.Value, _config.Settings.PreferredLanguage, StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            _isInitializingLanguageSelection = false;
+        }
+    }
+
+    private async void LanguageComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isInitializingLanguageSelection || LanguageComboBox.SelectedItem is not LanguageOption option)
+        {
+            return;
+        }
+
+        var preferredLanguage = LocalizationService.NormalizePreference(option.Value);
+        if (string.Equals(_config.Settings.PreferredLanguage, preferredLanguage, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _config.Settings.PreferredLanguage = preferredLanguage;
+        await SaveConfigurationAsync();
+        SetLocalizedStatus("Status.LanguageSavedRestart", InfoBarSeverity.Informational);
     }
 
     private void RefreshRemoteList()
@@ -135,27 +202,29 @@ public sealed partial class MainWindow : Window
         if (_config.Settings.SelectedRemoteId.HasValue)
         {
             var target = _config.Remotes.FirstOrDefault(r => r.Id == _config.Settings.SelectedRemoteId.Value);
-            CurrentTargetTextBlock.Text = target is not null ? target.DisplayTitle : "（已删除）";
+            CurrentTargetTextBlock.Text = target is not null
+                ? target.DisplayTitle
+                : LocalizationService.GetString("Status.TargetDeleted");
         }
         else
         {
-            CurrentTargetTextBlock.Text = "未选择";
+            CurrentTargetTextBlock.Text = LocalizationService.GetString("Status.TargetNone");
         }
     }
 
     private async Task RefreshTopologyAsync()
     {
-        SetStatus("正在扫描 USB 拓扑，首次刷新可能需要 10-30 秒…", InfoBarSeverity.Informational);
+        SetLocalizedStatus("Status.ScanStarting", InfoBarSeverity.Informational);
 
         try
         {
             _topology = await _usbTopologyService.BuildSnapshotAsync();
             BuildTree();
-            SetStatus($"设备拓扑刷新完成，共 {_treeByInstanceId.Count} 个节点。", InfoBarSeverity.Success);
+            SetLocalizedStatus("Status.RefreshCompleted", InfoBarSeverity.Success, _treeByInstanceId.Count);
         }
         catch (Exception ex)
         {
-            SetStatus($"刷新设备失败: {ex.Message}", InfoBarSeverity.Error);
+            SetLocalizedStatus("Status.RefreshFailed", InfoBarSeverity.Error, ex.Message);
         }
     }
 
@@ -224,11 +293,11 @@ public sealed partial class MainWindow : Window
 
         if (node.IsShareable && !string.IsNullOrWhiteSpace(node.BusId))
         {
-            parts.Add($"BusId: {node.BusId}");
+            parts.Add(LocalizationService.Format("Tree.Subtitle.BusId", node.BusId));
         }
         else if (!node.IsHub)
         {
-            parts.Add("不可直接分享");
+            parts.Add(LocalizationService.GetString("Tree.Subtitle.NotDirectShare"));
         }
 
         return string.Join(" | ", parts);
@@ -350,6 +419,11 @@ public sealed partial class MainWindow : Window
         StatusInfoBar.IsOpen = true;
     }
 
+    private void SetLocalizedStatus(string resourceKey, InfoBarSeverity severity, params object[] args)
+    {
+        SetStatus(LocalizationService.Format(resourceKey, args), severity);
+    }
+
     private async Task PersistAndPropagateConfigurationAsync()
     {
         await SaveConfigurationAsync();
@@ -368,13 +442,13 @@ public sealed partial class MainWindow : Window
     {
         if (!_isAdmin)
         {
-            SetStatus("未获得管理员权限，无法开始分享。", InfoBarSeverity.Warning);
+            SetLocalizedStatus("Status.StartRequiresAdmin", InfoBarSeverity.Warning);
             return;
         }
 
         if (!_config.Settings.SelectedRemoteId.HasValue)
         {
-            SetStatus("请先选择一个远程服务器作为分享目标。", InfoBarSeverity.Warning);
+            SetLocalizedStatus("Status.TargetRequired", InfoBarSeverity.Warning);
             return;
         }
 
@@ -383,11 +457,11 @@ public sealed partial class MainWindow : Window
             await _orchestrator.StartAsync(_config);
             StartShareButton.IsEnabled = false;
             StopShareButton.IsEnabled = true;
-            SetStatus("分享编排器已启动。", InfoBarSeverity.Success);
+            SetLocalizedStatus("Status.OrchestratorStarted", InfoBarSeverity.Success);
         }
         catch (Exception ex)
         {
-            SetStatus($"启动失败: {ex.Message}", InfoBarSeverity.Error);
+            SetLocalizedStatus("Status.StartFailed", InfoBarSeverity.Error, ex.Message);
         }
     }
 
@@ -398,12 +472,12 @@ public sealed partial class MainWindow : Window
             await _orchestrator.StopAsync();
             StartShareButton.IsEnabled = _isAdmin;
             StopShareButton.IsEnabled = false;
-            SetStatus("分享已停止并完成会话回滚。", InfoBarSeverity.Informational);
+            SetLocalizedStatus("Status.Stopped", InfoBarSeverity.Informational);
             await RefreshTopologyAsync();
         }
         catch (Exception ex)
         {
-            SetStatus($"停止失败: {ex.Message}", InfoBarSeverity.Error);
+            SetLocalizedStatus("Status.StopFailed", InfoBarSeverity.Error, ex.Message);
         }
     }
 
@@ -431,14 +505,14 @@ public sealed partial class MainWindow : Window
     {
         if (_selectedRemote is null)
         {
-            SetStatus("请先选择一个远程服务器。", InfoBarSeverity.Warning);
+            SetLocalizedStatus("Status.RemoteRequired", InfoBarSeverity.Warning);
             return;
         }
 
         // 如果正在运行，需要先停止
         if (_orchestrator.IsRunning)
         {
-            SetStatus("请先停止分享后再更改分享目标。", InfoBarSeverity.Warning);
+            SetLocalizedStatus("Status.StopBeforeChangeTarget", InfoBarSeverity.Warning);
             return;
         }
 
@@ -449,7 +523,7 @@ public sealed partial class MainWindow : Window
         RefreshRemoteList();
         UpdateSetAsTargetButtonState();
 
-        SetStatus($"已将 {_selectedRemote.DisplayTitle} 设为分享目标。", InfoBarSeverity.Success);
+        SetLocalizedStatus("Status.TargetSet", InfoBarSeverity.Success, _selectedRemote.DisplayTitle);
     }
 
     private async void AddRemoteButton_Click(object sender, RoutedEventArgs e)
@@ -473,7 +547,7 @@ public sealed partial class MainWindow : Window
     {
         if (_selectedRemote is null)
         {
-            SetStatus("请先选择一个远程。", InfoBarSeverity.Warning);
+            SetLocalizedStatus("Status.RemoteSelectionRequired", InfoBarSeverity.Warning);
             return;
         }
 
@@ -501,7 +575,7 @@ public sealed partial class MainWindow : Window
     {
         if (_selectedRemote is null)
         {
-            SetStatus("请先选择要删除的远程。", InfoBarSeverity.Warning);
+            SetLocalizedStatus("Status.RemoteDeleteSelectionRequired", InfoBarSeverity.Warning);
             return;
         }
 
@@ -511,7 +585,7 @@ public sealed partial class MainWindow : Window
         {
             if (_orchestrator.IsRunning)
             {
-                SetStatus("无法删除当前正在使用的分享目标。请先停止分享。", InfoBarSeverity.Warning);
+                SetLocalizedStatus("Status.RemoteDeleteInUse", InfoBarSeverity.Warning);
                 return;
             }
 
@@ -521,10 +595,10 @@ public sealed partial class MainWindow : Window
         var confirmDialog = new ContentDialog
         {
             XamlRoot = RootGrid.XamlRoot,
-            Title = "删除远程",
-            Content = $"确认删除远程 \"{_selectedRemote.DisplayTitle}\"？",
-            PrimaryButtonText = "删除",
-            CloseButtonText = "取消",
+            Title = LocalizationService.GetString("Dialog.DeleteRemote.Title"),
+            Content = LocalizationService.Format("Dialog.DeleteRemote.Content", _selectedRemote.DisplayTitle),
+            PrimaryButtonText = LocalizationService.GetString("Dialog.DeleteRemote.Primary"),
+            CloseButtonText = LocalizationService.GetString("Dialog.Common.Cancel"),
             DefaultButton = ContentDialogButton.Close,
         };
 
@@ -543,14 +617,14 @@ public sealed partial class MainWindow : Window
         RefreshRemoteList();
         UpdateCurrentTargetDisplay();
         ApplyEnabledStates();
-        SetStatus("远程已删除。", InfoBarSeverity.Success);
+        SetLocalizedStatus("Status.RemoteDeleted", InfoBarSeverity.Success);
     }
 
     private async void TestRemoteButton_Click(object sender, RoutedEventArgs e)
     {
         if (_selectedRemote is null)
         {
-            SetStatus("请先选择一个远程。", InfoBarSeverity.Warning);
+            SetLocalizedStatus("Status.RemoteSelectionRequired", InfoBarSeverity.Warning);
             return;
         }
 
@@ -562,16 +636,20 @@ public sealed partial class MainWindow : Window
             var probe = await session.ProbeAsync();
             if (probe.Success && probe.Output.Contains("READY", StringComparison.OrdinalIgnoreCase))
             {
-                SetStatus($"远程 {_selectedRemote.DisplayTitle} 连接成功，usbip/sudo 可用。", InfoBarSeverity.Success);
+                SetLocalizedStatus("Status.RemoteConnectionSuccess", InfoBarSeverity.Success, _selectedRemote.DisplayTitle);
             }
             else
             {
-                SetStatus($"远程 {_selectedRemote.DisplayTitle} 可连接，但缺少 usbip 或 sudo。{probe.Output} {probe.Error}".Trim(), InfoBarSeverity.Warning);
+                SetLocalizedStatus(
+                    "Status.RemoteConnectionMissingRequirements",
+                    InfoBarSeverity.Warning,
+                    _selectedRemote.DisplayTitle,
+                    $"{probe.Output} {probe.Error}".Trim());
             }
         }
         catch (Exception ex)
         {
-            SetStatus($"远程连接失败: {ex.Message}", InfoBarSeverity.Error);
+            SetLocalizedStatus("Status.RemoteConnectionFailed", InfoBarSeverity.Error, ex.Message);
         }
     }
 
@@ -586,14 +664,14 @@ public sealed partial class MainWindow : Window
 
         if (!_selectedNode.CanEnable)
         {
-            SetStatus("该节点不可启用分享。", InfoBarSeverity.Warning);
+            SetLocalizedStatus("Status.NodeUnavailable", InfoBarSeverity.Warning);
             return;
         }
 
         // 切换设备状态
         var newEnabled = !_selectedNode.IsEnabled;
         await ToggleDeviceEnabledAsync(_selectedNode.InstanceId, newEnabled);
-        SetStatus(newEnabled ? "设备已启用分享。" : "设备已禁用分享。", InfoBarSeverity.Success);
+        SetLocalizedStatus(newEnabled ? "Status.DeviceEnabled" : "Status.DeviceDisabled", InfoBarSeverity.Success);
     }
 
     private void UsbTreeView_SelectionChanged(TreeView sender, TreeViewSelectionChangedEventArgs args)
@@ -629,7 +707,7 @@ public sealed partial class MainWindow : Window
             if (state.LastErrorsByKey.Count > 0)
             {
                 var latestError = state.LastErrorsByKey.Last();
-                SetStatus($"运行告警: {latestError.Value}", InfoBarSeverity.Warning);
+                SetLocalizedStatus("Status.RuntimeWarning", InfoBarSeverity.Warning, latestError.Value);
             }
         });
     }
@@ -687,37 +765,43 @@ public sealed partial class MainWindow : Window
 
     private async Task<RemoteEditorResult?> ShowRemoteEditorDialogAsync(RemoteConfig? existingRemote)
     {
-        var nameBox = new TextBox { Header = "名称", Text = existingRemote?.Name ?? string.Empty };
-        var hostBox = new TextBox { Header = "Host", Text = existingRemote?.Host ?? string.Empty };
+        var nameBox = new TextBox { Header = LocalizationService.GetString("Dialog.RemoteEditor.NameHeader"), Text = existingRemote?.Name ?? string.Empty };
+        var hostBox = new TextBox { Header = LocalizationService.GetString("Dialog.RemoteEditor.HostHeader"), Text = existingRemote?.Host ?? string.Empty };
         var portBox = new NumberBox
         {
-            Header = "SSH 端口",
+            Header = LocalizationService.GetString("Dialog.RemoteEditor.PortHeader"),
             Minimum = 1,
             Maximum = 65535,
             Value = existingRemote?.Port ?? 22,
         };
-        var userBox = new TextBox { Header = "用户名", Text = existingRemote?.User ?? string.Empty };
+        var userBox = new TextBox { Header = LocalizationService.GetString("Dialog.RemoteEditor.UserHeader"), Text = existingRemote?.User ?? string.Empty };
+        var authOptions = new List<AuthTypeOption>
+        {
+            new(AuthType.Password, LocalizationService.GetAuthTypeLabel(AuthType.Password)),
+            new(AuthType.PrivateKey, LocalizationService.GetAuthTypeLabel(AuthType.PrivateKey)),
+        };
         var authBox = new ComboBox
         {
-            Header = "认证方式",
-            ItemsSource = Enum.GetValues<AuthType>(),
-            SelectedItem = existingRemote?.AuthType ?? AuthType.PrivateKey,
+            Header = LocalizationService.GetString("Dialog.RemoteEditor.AuthHeader"),
+            DisplayMemberPath = nameof(AuthTypeOption.Label),
+            ItemsSource = authOptions,
+            SelectedItem = authOptions.First(option => option.Value == (existingRemote?.AuthType ?? AuthType.PrivateKey)),
         };
         var keyPathBox = new TextBox
         {
-            Header = "私钥路径(密钥认证)",
+            Header = LocalizationService.GetString("Dialog.RemoteEditor.KeyPathHeader"),
             Text = existingRemote?.KeyPath ?? string.Empty,
-            PlaceholderText = "留空时自动查找 ~/.ssh 下的默认私钥",
+            PlaceholderText = LocalizationService.GetString("Dialog.RemoteEditor.KeyPathPlaceholder"),
         };
         var tunnelPortBox = new NumberBox
         {
-            Header = "远端映射端口",
+            Header = LocalizationService.GetString("Dialog.RemoteEditor.TunnelPortHeader"),
             Minimum = 1,
             Maximum = 65535,
             Value = existingRemote?.TunnelPort ?? 3240,
         };
-        var sshPasswordBox = new PasswordBox { Header = "SSH密码/密钥口令(留空=不修改)" };
-        var sudoPasswordBox = new PasswordBox { Header = "sudo密码(留空=不修改)" };
+        var sshPasswordBox = new PasswordBox { Header = LocalizationService.GetString("Dialog.RemoteEditor.SshPasswordHeader") };
+        var sudoPasswordBox = new PasswordBox { Header = LocalizationService.GetString("Dialog.RemoteEditor.SudoPasswordHeader") };
         var validationTextBlock = new TextBlock
         {
             Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorCriticalBrush"],
@@ -751,27 +835,27 @@ public sealed partial class MainWindow : Window
 
         string? ValidateInputs()
         {
-            var authType = authBox.SelectedItem is AuthType selectedAuthType ? selectedAuthType : AuthType.PrivateKey;
+            var authType = authBox.SelectedItem is AuthTypeOption authOption ? authOption.Value : AuthType.PrivateKey;
             if (string.IsNullOrWhiteSpace(hostBox.Text) || string.IsNullOrWhiteSpace(userBox.Text))
             {
-                return "Host 和 用户名不能为空。";
+                return LocalizationService.GetString("Validation.HostUserRequired");
             }
 
             if (double.IsNaN(portBox.Value) || portBox.Value < 1 || portBox.Value > 65535)
             {
-                return "SSH 端口必须在 1 到 65535 之间。";
+                return LocalizationService.GetString("Validation.SshPortRange");
             }
 
             if (double.IsNaN(tunnelPortBox.Value) || tunnelPortBox.Value < 1 || tunnelPortBox.Value > 65535)
             {
-                return "远端映射端口必须在 1 到 65535 之间。";
+                return LocalizationService.GetString("Validation.TunnelPortRange");
             }
 
             if (authType == AuthType.Password &&
                 string.IsNullOrWhiteSpace(sshPasswordBox.Password) &&
                 existingRemote is null)
             {
-                return "密码认证在新建时必须提供 SSH 密码。";
+                return LocalizationService.GetString("Validation.PasswordRequiredOnCreate");
             }
 
             return null;
@@ -779,7 +863,7 @@ public sealed partial class MainWindow : Window
 
         void UpdateAuthUi()
         {
-            var auth = authBox.SelectedItem is AuthType selectedAuthType ? selectedAuthType : AuthType.PrivateKey;
+            var auth = authBox.SelectedItem is AuthTypeOption authOption ? authOption.Value : AuthType.PrivateKey;
             keyPathBox.IsEnabled = auth == AuthType.PrivateKey;
             keyPathBox.Visibility = auth == AuthType.PrivateKey ? Visibility.Visible : Visibility.Collapsed;
         }
@@ -800,10 +884,10 @@ public sealed partial class MainWindow : Window
         var dialog = new ContentDialog
         {
             XamlRoot = RootGrid.XamlRoot,
-            Title = existingRemote is null ? "新增远程" : "编辑远程",
+            Title = LocalizationService.GetString(existingRemote is null ? "Dialog.RemoteEditor.AddTitle" : "Dialog.RemoteEditor.EditTitle"),
             Content = panel,
-            PrimaryButtonText = "保存",
-            CloseButtonText = "取消",
+            PrimaryButtonText = LocalizationService.GetString("Dialog.Common.Save"),
+            CloseButtonText = LocalizationService.GetString("Dialog.Common.Cancel"),
             DefaultButton = ContentDialogButton.Primary,
         };
         dialog.PrimaryButtonClick += (_, args) =>
@@ -825,7 +909,7 @@ public sealed partial class MainWindow : Window
             return null;
         }
 
-        var authType = authBox.SelectedItem is AuthType selectedAuthType ? selectedAuthType : AuthType.PrivateKey;
+        var authType = authBox.SelectedItem is AuthTypeOption authOption ? authOption.Value : AuthType.PrivateKey;
         var remote = new RemoteConfig
         {
             Id = existingRemote?.Id ?? Guid.NewGuid(),
@@ -884,5 +968,9 @@ public sealed partial class MainWindow : Window
         public required RemoteConfig Remote { get; init; }
         public string? SshSecret { get; init; }
         public string? SudoSecret { get; init; }
-}
+    }
+
+    private sealed record LanguageOption(string Value, string Label);
+
+    private sealed record AuthTypeOption(AuthType Value, string Label);
 }

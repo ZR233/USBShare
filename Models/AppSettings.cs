@@ -12,4 +12,5 @@ public sealed class AppSettings
     /// 满足所有条件时，程序启动后自动开始分享。
     /// </summary>
     public bool AutoStart { get; set; } = true;
+    public string PreferredLanguage { get; set; } = "system";
 }

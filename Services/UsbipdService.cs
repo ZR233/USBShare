@@ -1,4 +1,3 @@
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using USBShare.Models;
 
@@ -17,10 +16,6 @@ public interface IUsbipdService
 
 public sealed class UsbipdService : IUsbipdService
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-    };
     private static readonly Regex ListRowRegex = new(
         @"^\s*(?<busid>\S+)\s+(?<vidpid>[0-9A-Fa-f]{4}:[0-9A-Fa-f]{4})\s+(?<tail>.+?)\s*$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -42,7 +37,7 @@ public sealed class UsbipdService : IUsbipdService
             throw new InvalidOperationException($"usbipd state failed: {MergeOutput(result)}");
         }
 
-        var snapshot = JsonSerializer.Deserialize<UsbipStateSnapshot>(result.StandardOutput, JsonOptions);
+        var snapshot = System.Text.Json.JsonSerializer.Deserialize(result.StandardOutput, AppJsonSerializerContext.Default.UsbipStateSnapshot);
         return snapshot ?? new UsbipStateSnapshot();
     }
 

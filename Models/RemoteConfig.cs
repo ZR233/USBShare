@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using USBShare.Services;
 
 namespace USBShare.Models;
 
@@ -17,5 +18,11 @@ public sealed class RemoteConfig
     public string DisplayTitle => string.IsNullOrWhiteSpace(Name) ? $"{User}@{Host}" : Name;
 
     [JsonIgnore]
-    public string DisplaySubtitle => $"{User}@{Host}:{Port} | Tunnel:{TunnelPort} | {AuthType}";
+    public string DisplaySubtitle => LocalizationService.Format(
+        "Remote.Subtitle.Format",
+        User,
+        Host,
+        Port,
+        TunnelPort,
+        LocalizationService.GetAuthTypeLabel(AuthType));
 }

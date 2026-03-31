@@ -1,4 +1,3 @@
-using System.Text.Json;
 using USBShare.Models;
 
 namespace USBShare.Services;
@@ -11,12 +10,6 @@ public interface IConfigStore
 
 public sealed class ConfigStore : IConfigStore
 {
-    private static readonly JsonSerializerOptions SerializerOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        WriteIndented = true,
-    };
-
     public async Task<AppConfig> LoadAsync(CancellationToken cancellationToken = default)
     {
         if (!File.Exists(AppPaths.ConfigFilePath))
@@ -30,13 +23,13 @@ public sealed class ConfigStore : IConfigStore
             return new AppConfig();
         }
 
-        var config = JsonSerializer.Deserialize<AppConfig>(content, SerializerOptions);
+        var config = System.Text.Json.JsonSerializer.Deserialize(content, AppJsonSerializerContext.Default.AppConfig);
         return config ?? new AppConfig();
     }
 
     public async Task SaveAsync(AppConfig config, CancellationToken cancellationToken = default)
     {
-        var payload = JsonSerializer.Serialize(config, SerializerOptions);
+        var payload = System.Text.Json.JsonSerializer.Serialize(config, AppJsonSerializerContext.Default.AppConfig);
         await File.WriteAllTextAsync(AppPaths.ConfigFilePath, payload, cancellationToken).ConfigureAwait(false);
     }
 }

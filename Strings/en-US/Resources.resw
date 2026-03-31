@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, ...</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, ...</value>
+  </resheader>
+  <data name="MainWindow.Title" xml:space="preserve"><value>USBShare</value></data>
+  <data name="AppDisplayName" xml:space="preserve"><value>USBShare</value></data>
+  <data name="PackageDescription" xml:space="preserve"><value>Requires administrator permission on launch to run usbipd-win bind and unbind operations.</value></data>
+  <data name="RefreshButton.Label" xml:space="preserve"><value>Refresh</value></data>
+  <data name="StartShareButton.Label" xml:space="preserve"><value>Start Sharing</value></data>
+  <data name="StopShareButton.Label" xml:space="preserve"><value>Stop Sharing</value></data>
+  <data name="RemoteSectionTitle.Text" xml:space="preserve"><value>SSH Remote Configuration</value></data>
+  <data name="CurrentTargetLabel.Text" xml:space="preserve"><value>Current Share Target</value></data>
+  <data name="CurrentTargetTextBlock.Text" xml:space="preserve"><value>Not selected</value></data>
+  <data name="AddRemoteButton.Content" xml:space="preserve"><value>Add</value></data>
+  <data name="EditRemoteButton.Content" xml:space="preserve"><value>Edit</value></data>
+  <data name="DeleteRemoteButton.Content" xml:space="preserve"><value>Delete</value></data>
+  <data name="TestRemoteButton.Content" xml:space="preserve"><value>Test Connection</value></data>
+  <data name="SetAsTargetButton.Content" xml:space="preserve"><value>Set as Share Target</value></data>
+  <data name="PollIntervalLabel.Text" xml:space="preserve"><value>Polling Interval (s)</value></data>
+  <data name="AutoStartToggle.Header" xml:space="preserve"><value>Start sharing automatically on launch</value></data>
+  <data name="LanguageLabel.Text" xml:space="preserve"><value>Language</value></data>
+  <data name="LanguageRestartHintTextBlock.Text" xml:space="preserve"><value>Language changes take effect the next time the app starts.</value></data>
+  <data name="UsbShareSectionTitle.Text" xml:space="preserve"><value>USB Device Sharing</value></data>
+  <data name="StatusInfoBar.Message" xml:space="preserve"><value>Ready</value></data>
+  <data name="BottomHintTextBlock.Text" xml:space="preserve"><value>Tip: All enabled devices will be shared to the remote server selected on the left.</value></data>
+  <data name="Status.AdminReady" xml:space="preserve"><value>Administrator privileges are ready.</value></data>
+  <data name="Status.AdminRequired" xml:space="preserve"><value>Administrator privileges are required for usbipd bind/unbind operations.</value></data>
+  <data name="Status.AutoStarted" xml:space="preserve"><value>Sharing started automatically.</value></data>
+  <data name="Status.AutoStartFailed" xml:space="preserve"><value>Auto-start failed: {0}</value></data>
+  <data name="Status.TargetDeleted" xml:space="preserve"><value>(Deleted)</value></data>
+  <data name="Status.TargetNone" xml:space="preserve"><value>Not selected</value></data>
+  <data name="Status.ScanStarting" xml:space="preserve"><value>Scanning the USB topology. The first refresh may take 10-30 seconds...</value></data>
+  <data name="Status.RefreshCompleted" xml:space="preserve"><value>USB topology refreshed. {0} nodes found.</value></data>
+  <data name="Status.RefreshFailed" xml:space="preserve"><value>Failed to refresh devices: {0}</value></data>
+  <data name="Status.StartRequiresAdmin" xml:space="preserve"><value>Administrator privileges are required before sharing can start.</value></data>
+  <data name="Status.TargetRequired" xml:space="preserve"><value>Please select a remote server as the share target first.</value></data>
+  <data name="Status.OrchestratorStarted" xml:space="preserve"><value>Sharing orchestration started.</value></data>
+  <data name="Status.StartFailed" xml:space="preserve"><value>Start failed: {0}</value></data>
+  <data name="Status.Stopped" xml:space="preserve"><value>Sharing stopped and session resources were rolled back.</value></data>
+  <data name="Status.StopFailed" xml:space="preserve"><value>Stop failed: {0}</value></data>
+  <data name="Status.RemoteRequired" xml:space="preserve"><value>Please select a remote server first.</value></data>
+  <data name="Status.StopBeforeChangeTarget" xml:space="preserve"><value>Stop sharing before changing the share target.</value></data>
+  <data name="Status.TargetSet" xml:space="preserve"><value>{0} is now the share target.</value></data>
+  <data name="Status.RemoteSelectionRequired" xml:space="preserve"><value>Please select a remote first.</value></data>
+  <data name="Status.RemoteDeleteSelectionRequired" xml:space="preserve"><value>Please select a remote to delete first.</value></data>
+  <data name="Status.RemoteDeleteInUse" xml:space="preserve"><value>The current share target cannot be deleted while sharing is running.</value></data>
+  <data name="Dialog.DeleteRemote.Title" xml:space="preserve"><value>Delete Remote</value></data>
+  <data name="Dialog.DeleteRemote.Content" xml:space="preserve"><value>Delete remote "{0}"?</value></data>
+  <data name="Dialog.DeleteRemote.Primary" xml:space="preserve"><value>Delete</value></data>
+  <data name="Dialog.Common.Cancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="Dialog.Common.Save" xml:space="preserve"><value>Save</value></data>
+  <data name="Status.RemoteDeleted" xml:space="preserve"><value>Remote deleted.</value></data>
+  <data name="Status.RemoteConnectionSuccess" xml:space="preserve"><value>Remote {0} connected successfully. usbip/sudo are available.</value></data>
+  <data name="Status.RemoteConnectionMissingRequirements" xml:space="preserve"><value>Remote {0} is reachable, but usbip or sudo is missing. {1}</value></data>
+  <data name="Status.RemoteConnectionFailed" xml:space="preserve"><value>Remote connection failed: {0}</value></data>
+  <data name="Status.NodeUnavailable" xml:space="preserve"><value>This node cannot be enabled for sharing.</value></data>
+  <data name="Status.DeviceEnabled" xml:space="preserve"><value>Device sharing enabled.</value></data>
+  <data name="Status.DeviceDisabled" xml:space="preserve"><value>Device sharing disabled.</value></data>
+  <data name="Status.RuntimeWarning" xml:space="preserve"><value>Runtime warning: {0}</value></data>
+  <data name="Status.LanguageSavedRestart" xml:space="preserve"><value>Language preference saved. Restart the app to apply it.</value></data>
+  <data name="Dialog.RemoteEditor.NameHeader" xml:space="preserve"><value>Name</value></data>
+  <data name="Dialog.RemoteEditor.HostHeader" xml:space="preserve"><value>Host</value></data>
+  <data name="Dialog.RemoteEditor.PortHeader" xml:space="preserve"><value>SSH Port</value></data>
+  <data name="Dialog.RemoteEditor.UserHeader" xml:space="preserve"><value>Username</value></data>
+  <data name="Dialog.RemoteEditor.AuthHeader" xml:space="preserve"><value>Authentication</value></data>
+  <data name="Dialog.RemoteEditor.KeyPathHeader" xml:space="preserve"><value>Private Key Path</value></data>
+  <data name="Dialog.RemoteEditor.KeyPathPlaceholder" xml:space="preserve"><value>Leave empty to auto-detect a default key under ~/.ssh</value></data>
+  <data name="Dialog.RemoteEditor.TunnelPortHeader" xml:space="preserve"><value>Remote Tunnel Port</value></data>
+  <data name="Dialog.RemoteEditor.SshPasswordHeader" xml:space="preserve"><value>SSH Password / Key Passphrase (leave empty to keep unchanged)</value></data>
+  <data name="Dialog.RemoteEditor.SudoPasswordHeader" xml:space="preserve"><value>sudo Password (leave empty to keep unchanged)</value></data>
+  <data name="Dialog.RemoteEditor.AddTitle" xml:space="preserve"><value>Add Remote</value></data>
+  <data name="Dialog.RemoteEditor.EditTitle" xml:space="preserve"><value>Edit Remote</value></data>
+  <data name="Validation.HostUserRequired" xml:space="preserve"><value>Host and username are required.</value></data>
+  <data name="Validation.SshPortRange" xml:space="preserve"><value>SSH port must be between 1 and 65535.</value></data>
+  <data name="Validation.TunnelPortRange" xml:space="preserve"><value>Remote tunnel port must be between 1 and 65535.</value></data>
+  <data name="Validation.PasswordRequiredOnCreate" xml:space="preserve"><value>SSH password is required when creating a password-auth remote.</value></data>
+  <data name="Language.Option.System" xml:space="preserve"><value>Follow system</value></data>
+  <data name="Language.Option.ZhCn" xml:space="preserve"><value>简体中文</value></data>
+  <data name="Language.Option.EnUs" xml:space="preserve"><value>English</value></data>
+  <data name="AuthType.Password" xml:space="preserve"><value>Password</value></data>
+  <data name="AuthType.PrivateKey" xml:space="preserve"><value>Private key</value></data>
+  <data name="Tree.Subtitle.BusId" xml:space="preserve"><value>BusId: {0}</value></data>
+  <data name="Tree.Subtitle.NotDirectShare" xml:space="preserve"><value>Cannot be shared directly</value></data>
+  <data name="Tree.Status.Unavailable" xml:space="preserve"><value>Unavailable</value></data>
+  <data name="Tree.Status.Available" xml:space="preserve"><value>Available</value></data>
+  <data name="Tree.Status.Enabled" xml:space="preserve"><value>Enabled</value></data>
+  <data name="Tree.Status.Inherited" xml:space="preserve"><value>Inherited</value></data>
+  <data name="Tree.Status.Bound" xml:space="preserve"><value>Bound</value></data>
+  <data name="Tree.Status.Attached" xml:space="preserve"><value>Shared</value></data>
+  <data name="Tree.Status.Error" xml:space="preserve"><value>Error</value></data>
+  <data name="Remote.Subtitle.Format" xml:space="preserve"><value>{0}@{1}:{2} | Tunnel:{3} | {4}</value></data>
+  <data name="Error.TargetMissing" xml:space="preserve"><value>The selected remote server no longer exists. Please choose again.</value></data>
+  <data name="Error.RemoteChangedReconnect" xml:space="preserve"><value>The remote server changed and will reconnect during the next cycle.</value></data>
+  <data name="Error.RemoteNotSelected" xml:space="preserve"><value>No remote server selected.</value></data>
+  <data name="Error.RemoteNotFound" xml:space="preserve"><value>The selected remote server could not be found.</value></data>
+  <data name="Error.RemoteProbeFailed" xml:space="preserve"><value>Environment checks failed for remote {0}. Make sure usbip and sudo are installed. {1}</value></data>
+  <data name="Error.PermissionRequired" xml:space="preserve"><value>usbipd bind requires administrator privileges.</value></data>
+  <data name="Error.Unknown" xml:space="preserve"><value>Unknown error</value></data>
+</root>

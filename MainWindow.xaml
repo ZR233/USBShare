@@ -17,10 +17,10 @@
 
     <Grid x:Name="RootGrid" RowDefinitions="Auto,*,Auto" Padding="12" RowSpacing="12">
         <CommandBar DefaultLabelPosition="Collapsed" VerticalAlignment="Top">
-            <AppBarButton Label="刷新" Icon="Refresh" Click="RefreshButton_Click" />
+            <AppBarButton x:Name="RefreshButton" Icon="Refresh" Click="RefreshButton_Click" />
             <AppBarSeparator />
-            <AppBarButton x:Name="StartShareButton" Label="开始分享" Icon="Play" Click="StartShareButton_Click" />
-            <AppBarButton x:Name="StopShareButton" Label="停止分享" Icon="Stop" Click="StopShareButton_Click" IsEnabled="False" />
+            <AppBarButton x:Name="StartShareButton" Icon="Play" Click="StartShareButton_Click" />
+            <AppBarButton x:Name="StopShareButton" Icon="Stop" Click="StopShareButton_Click" IsEnabled="False" />
         </CommandBar>
 
         <Grid Grid.Row="1" ColumnDefinitions="360,*" ColumnSpacing="12">
@@ -31,7 +31,7 @@
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     Padding="12">
                 <Grid RowDefinitions="Auto,Auto,*,Auto,Auto,Auto" RowSpacing="8">
-                    <TextBlock Text="SSH 远程配置" FontSize="18" FontWeight="SemiBold" />
+                    <TextBlock x:Name="RemoteSectionTitleTextBlock" FontSize="18" FontWeight="SemiBold" />
 
                     <!-- 当前分享目标显示 -->
                     <Border Grid.Row="1"
@@ -42,11 +42,8 @@
                         <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
                             <FontIcon Glyph="&#xE890;" VerticalAlignment="Center" />
                             <StackPanel Grid.Column="1" Spacing="2">
-                                <TextBlock Text="当前分享目标" FontSize="12" Opacity="0.72" />
-                                <TextBlock x:Name="CurrentTargetTextBlock"
-                                           Text="未选择"
-                                           FontWeight="SemiBold"
-                                           Opacity="0.9" />
+                                <TextBlock x:Name="CurrentTargetLabelTextBlock" FontSize="12" Opacity="0.72" />
+                                <TextBlock x:Name="CurrentTargetTextBlock" FontWeight="SemiBold" Opacity="0.9" />
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -66,29 +63,27 @@
                     </ListView>
 
                     <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8">
-                        <Button Content="新增" Click="AddRemoteButton_Click" />
-                        <Button Content="编辑" Click="EditRemoteButton_Click" />
-                        <Button Content="删除" Click="DeleteRemoteButton_Click" />
-                        <Button Content="测试连接" Click="TestRemoteButton_Click" />
+                        <Button x:Name="AddRemoteButton" Click="AddRemoteButton_Click" />
+                        <Button x:Name="EditRemoteButton" Click="EditRemoteButton_Click" />
+                        <Button x:Name="DeleteRemoteButton" Click="DeleteRemoteButton_Click" />
+                        <Button x:Name="TestRemoteButton" Click="TestRemoteButton_Click" />
                     </StackPanel>
 
-                    <Button x:Name="SetAsTargetButton"
-                            Grid.Row="4"
-                            Content="设为分享目标"
-                            Click="SetAsTargetButton_Click"
-                            IsEnabled="False" />
+                    <Button x:Name="SetAsTargetButton" Grid.Row="4" Click="SetAsTargetButton_Click" IsEnabled="False" />
 
                     <StackPanel Grid.Row="5" Spacing="6">
-                        <TextBlock Text="轮询间隔(秒)" />
+                        <TextBlock x:Name="PollIntervalLabelTextBlock" />
                         <NumberBox x:Name="PollIntervalNumberBox"
                                    Minimum="1"
                                    Maximum="30"
                                    SmallChange="1"
                                    SpinButtonPlacementMode="Inline"
                                    ValueChanged="PollIntervalNumberBox_ValueChanged" />
-                        <ToggleSwitch x:Name="AutoStartToggle"
-                                      Header="启动时自动开始分享"
-                                      Toggled="AutoStartToggle_Toggled" />
+                        <ToggleSwitch x:Name="AutoStartToggle" Toggled="AutoStartToggle_Toggled" />
+                        <TextBlock x:Name="LanguageLabelTextBlock" />
+                        <ComboBox x:Name="LanguageComboBox"
+                                  SelectionChanged="LanguageComboBox_SelectionChanged" />
+                        <TextBlock x:Name="LanguageRestartHintTextBlock" TextWrapping="Wrap" Opacity="0.72" />
                         <TextBlock x:Name="AdminHintTextBlock"
                                    TextWrapping="Wrap"
                                    Opacity="0.8" />
@@ -97,7 +92,7 @@
             </Border>
 
             <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto" RowSpacing="8">
-                <TextBlock Text="USB 设备分享" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock x:Name="UsbShareSectionTitleTextBlock" FontSize="18" FontWeight="SemiBold" />
 
                 <Border Grid.Row="1"
                         CornerRadius="8"
@@ -160,17 +155,10 @@
                     </TreeView>
                 </Border>
 
-                <InfoBar x:Name="StatusInfoBar"
-                         Grid.Row="2"
-                         IsOpen="False"
-                         IsClosable="False"
-                         Severity="Informational"
-                         Message="Ready" />
+                <InfoBar x:Name="StatusInfoBar" Grid.Row="2" IsOpen="False" IsClosable="False" Severity="Informational" />
             </Grid>
         </Grid>
 
-        <TextBlock Grid.Row="2"
-                   Text="提示: 所有启用的设备将统一分享到左侧选中的远程服务器。"
-                   Opacity="0.72" />
+        <TextBlock x:Name="BottomHintTextBlock" Grid.Row="2" Opacity="0.72" />
     </Grid>
 </Window>

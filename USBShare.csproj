@@ -66,12 +66,11 @@
 
   <!-- Publish Properties -->
   <PropertyGroup>
-    <PublishReadyToRun Condition="'$(Configuration)' == 'Debug'">False</PublishReadyToRun>
-    <PublishReadyToRun Condition="'$(Configuration)' != 'Debug' and '$(WindowsPackageType)' == 'None'">True</PublishReadyToRun>
-    <PublishReadyToRun Condition="'$(Configuration)' != 'Debug' and '$(WindowsPackageType)' != 'None'">False</PublishReadyToRun>
-    <PublishTrimmed Condition="'$(Configuration)' == 'Debug'">False</PublishTrimmed>
-    <PublishTrimmed Condition="'$(Configuration)' != 'Debug' and '$(WindowsPackageType)' == 'None'">True</PublishTrimmed>
-    <PublishTrimmed Condition="'$(Configuration)' != 'Debug' and '$(WindowsPackageType)' != 'None'">False</PublishTrimmed>
+    <!-- Keep CLI/MSIX release builds predictable unless the full symbol-packaging toolchain is installed. -->
+    <AppxSymbolPackageEnabled>false</AppxSymbolPackageEnabled>
+    <!-- Re-enable only after the app is fully trim-safe and validated with zero trim warnings. -->
+    <PublishReadyToRun>False</PublishReadyToRun>
+    <PublishTrimmed>False</PublishTrimmed>
     <GenerateAppInstallerFile>False</GenerateAppInstallerFile>
     <AppxPackageSigningEnabled>False</AppxPackageSigningEnabled>
     <AppxPackageSigningTimestampDigestAlgorithm>SHA256</AppxPackageSigningTimestampDigestAlgorithm>

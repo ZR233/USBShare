@@ -2,6 +2,7 @@ using Microsoft.UI;
 using Microsoft.UI.Xaml.Media;
 using Windows.UI;
 using USBShare.Models;
+using USBShare.Services;
 
 namespace USBShare.ViewModels;
 
@@ -214,13 +215,13 @@ public sealed class UsbTreeItemViewModel : BindableBase
     /// </summary>
     public string StatusText => ShareStatus switch
     {
-        DeviceShareStatus.Unavailable => "不可分享",
-        DeviceShareStatus.Available => "可用",
-        DeviceShareStatus.Enabled => "已启用",
-        DeviceShareStatus.Inherited => "继承",
-        DeviceShareStatus.Bound => "已绑定",
-        DeviceShareStatus.Attached => "已分享",
-        DeviceShareStatus.Error => "错误",
+        DeviceShareStatus.Unavailable => LocalizationService.GetString("Tree.Status.Unavailable"),
+        DeviceShareStatus.Available => LocalizationService.GetString("Tree.Status.Available"),
+        DeviceShareStatus.Enabled => LocalizationService.GetString("Tree.Status.Enabled"),
+        DeviceShareStatus.Inherited => LocalizationService.GetString("Tree.Status.Inherited"),
+        DeviceShareStatus.Bound => LocalizationService.GetString("Tree.Status.Bound"),
+        DeviceShareStatus.Attached => LocalizationService.GetString("Tree.Status.Attached"),
+        DeviceShareStatus.Error => LocalizationService.GetString("Tree.Status.Error"),
         _ => string.Empty
     };
 

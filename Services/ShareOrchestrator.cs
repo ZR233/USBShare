@@ -67,12 +67,12 @@ public sealed class ShareOrchestrator : IShareOrchestrator
             // 验证已选择远程服务器
             if (!_config.Settings.SelectedRemoteId.HasValue)
             {
-                throw new InvalidOperationException("请先选择一个远程服务器作为分享目标。");
+                throw new InvalidOperationException(LocalizationService.GetString("Status.TargetRequired"));
             }
 
             if (!_config.Remotes.Any(r => r.Id == _config.Settings.SelectedRemoteId.Value))
             {
-                throw new InvalidOperationException("选中的远程服务器不存在。请重新选择。");
+                throw new InvalidOperationException(LocalizationService.GetString("Error.TargetMissing"));
             }
 
             if (_loopTask is { IsCompleted: false })
@@ -110,7 +110,7 @@ public sealed class ShareOrchestrator : IShareOrchestrator
             {
                 SetState(state =>
                 {
-                    state.LastErrorsByKey["remote_change"] = "远程服务器已更改，将在下一个周期重新连接。";
+                    state.LastErrorsByKey["remote_change"] = LocalizationService.GetString("Error.RemoteChangedReconnect");
                 });
             }
         }
@@ -204,14 +204,14 @@ public sealed class ShareOrchestrator : IShareOrchestrator
         var selectedRemoteId = config.Settings.SelectedRemoteId;
         if (!selectedRemoteId.HasValue)
         {
-            SetError("remote", "未选择远程服务器。");
+            SetError("remote", LocalizationService.GetString("Error.RemoteNotSelected"));
             return;
         }
 
         var remote = config.Remotes.FirstOrDefault(r => r.Id == selectedRemoteId.Value);
         if (remote is null)
         {
-            SetError("remote", "选中的远程服务器不存在。");
+            SetError("remote", LocalizationService.GetString("Error.RemoteNotFound"));
             return;
         }
 
@@ -258,8 +258,10 @@ public sealed class ShareOrchestrator : IShareOrchestrator
             if (!probeResult.Success || !probeResult.Output.Contains("READY", StringComparison.OrdinalIgnoreCase))
             {
                 await session.DisposeAsync().ConfigureAwait(false);
-                throw new InvalidOperationException(
-                    $"远程 {remote.DisplayTitle} 环境检查失败，请确认已安装 usbip 和 sudo。{CompactRemoteError(probeResult)}");
+                throw new InvalidOperationException(LocalizationService.Format(
+                    "Error.RemoteProbeFailed",
+                    remote.DisplayTitle,
+                    CompactRemoteError(probeResult)));
             }
 
             _currentSession = session;
@@ -342,7 +344,7 @@ public sealed class ShareOrchestrator : IShareOrchestrator
                 SetError($"bind:{busId}", bindResult.Message);
                 if (bindResult.PermissionDenied)
                 {
-                    SetError("permission", "usbipd bind 需要管理员权限。");
+                    SetError("permission", LocalizationService.GetString("Error.PermissionRequired"));
                 }
                 continue;
             }
@@ -421,7 +423,12 @@ public sealed class ShareOrchestrator : IShareOrchestrator
 
     private void SetError(string key, string message)
     {
-        SetState(state => { state.LastErrorsByKey[key] = string.IsNullOrWhiteSpace(message) ? "Unknown error" : message; });
+        SetState(state =>
+        {
+            state.LastErrorsByKey[key] = string.IsNullOrWhiteSpace(message)
+                ? LocalizationService.GetString("Error.Unknown")
+                : message;
+        });
     }
 
     private void SetState(Action<ShareSessionState> mutator)
@@ -468,6 +475,8 @@ public sealed class ShareOrchestrator : IShareOrchestrator
             {
                 PollIntervalSeconds = source.Settings.PollIntervalSeconds,
                 SelectedRemoteId = source.Settings.SelectedRemoteId,
+                AutoStart = source.Settings.AutoStart,
+                PreferredLanguage = source.Settings.PreferredLanguage,
             },
         };
     }

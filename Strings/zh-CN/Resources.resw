@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, ...</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, ...</value>
+  </resheader>
+  <data name="MainWindow.Title" xml:space="preserve"><value>USBShare</value></data>
+  <data name="AppDisplayName" xml:space="preserve"><value>USBShare</value></data>
+  <data name="PackageDescription" xml:space="preserve"><value>启动时需要管理员权限，以执行 usbipd-win 的 bind 和 unbind 操作。</value></data>
+  <data name="RefreshButton.Label" xml:space="preserve"><value>刷新</value></data>
+  <data name="StartShareButton.Label" xml:space="preserve"><value>开始分享</value></data>
+  <data name="StopShareButton.Label" xml:space="preserve"><value>停止分享</value></data>
+  <data name="RemoteSectionTitle.Text" xml:space="preserve"><value>SSH 远程配置</value></data>
+  <data name="CurrentTargetLabel.Text" xml:space="preserve"><value>当前分享目标</value></data>
+  <data name="CurrentTargetTextBlock.Text" xml:space="preserve"><value>未选择</value></data>
+  <data name="AddRemoteButton.Content" xml:space="preserve"><value>新增</value></data>
+  <data name="EditRemoteButton.Content" xml:space="preserve"><value>编辑</value></data>
+  <data name="DeleteRemoteButton.Content" xml:space="preserve"><value>删除</value></data>
+  <data name="TestRemoteButton.Content" xml:space="preserve"><value>测试连接</value></data>
+  <data name="SetAsTargetButton.Content" xml:space="preserve"><value>设为分享目标</value></data>
+  <data name="PollIntervalLabel.Text" xml:space="preserve"><value>轮询间隔(秒)</value></data>
+  <data name="AutoStartToggle.Header" xml:space="preserve"><value>启动时自动开始分享</value></data>
+  <data name="LanguageLabel.Text" xml:space="preserve"><value>界面语言</value></data>
+  <data name="LanguageRestartHintTextBlock.Text" xml:space="preserve"><value>语言修改后将在下次启动应用时生效。</value></data>
+  <data name="UsbShareSectionTitle.Text" xml:space="preserve"><value>USB 设备分享</value></data>
+  <data name="StatusInfoBar.Message" xml:space="preserve"><value>准备就绪</value></data>
+  <data name="BottomHintTextBlock.Text" xml:space="preserve"><value>提示: 所有启用的设备将统一分享到左侧选中的远程服务器。</value></data>
+  <data name="Status.AdminReady" xml:space="preserve"><value>管理员权限已就绪。</value></data>
+  <data name="Status.AdminRequired" xml:space="preserve"><value>未获得管理员权限，无法执行 usbipd bind/unbind 操作。</value></data>
+  <data name="Status.AutoStarted" xml:space="preserve"><value>已自动开始分享。</value></data>
+  <data name="Status.AutoStartFailed" xml:space="preserve"><value>自动启动失败: {0}</value></data>
+  <data name="Status.TargetDeleted" xml:space="preserve"><value>（已删除）</value></data>
+  <data name="Status.TargetNone" xml:space="preserve"><value>未选择</value></data>
+  <data name="Status.ScanStarting" xml:space="preserve"><value>正在扫描 USB 拓扑，首次刷新可能需要 10-30 秒…</value></data>
+  <data name="Status.RefreshCompleted" xml:space="preserve"><value>设备拓扑刷新完成，共 {0} 个节点。</value></data>
+  <data name="Status.RefreshFailed" xml:space="preserve"><value>刷新设备失败: {0}</value></data>
+  <data name="Status.StartRequiresAdmin" xml:space="preserve"><value>未获得管理员权限，无法开始分享。</value></data>
+  <data name="Status.TargetRequired" xml:space="preserve"><value>请先选择一个远程服务器作为分享目标。</value></data>
+  <data name="Status.OrchestratorStarted" xml:space="preserve"><value>分享编排器已启动。</value></data>
+  <data name="Status.StartFailed" xml:space="preserve"><value>启动失败: {0}</value></data>
+  <data name="Status.Stopped" xml:space="preserve"><value>分享已停止并完成会话回滚。</value></data>
+  <data name="Status.StopFailed" xml:space="preserve"><value>停止失败: {0}</value></data>
+  <data name="Status.RemoteRequired" xml:space="preserve"><value>请先选择一个远程服务器。</value></data>
+  <data name="Status.StopBeforeChangeTarget" xml:space="preserve"><value>请先停止分享后再更改分享目标。</value></data>
+  <data name="Status.TargetSet" xml:space="preserve"><value>已将 {0} 设为分享目标。</value></data>
+  <data name="Status.RemoteSelectionRequired" xml:space="preserve"><value>请先选择一个远程。</value></data>
+  <data name="Status.RemoteDeleteSelectionRequired" xml:space="preserve"><value>请先选择要删除的远程。</value></data>
+  <data name="Status.RemoteDeleteInUse" xml:space="preserve"><value>无法删除当前正在使用的分享目标。请先停止分享。</value></data>
+  <data name="Dialog.DeleteRemote.Title" xml:space="preserve"><value>删除远程</value></data>
+  <data name="Dialog.DeleteRemote.Content" xml:space="preserve"><value>确认删除远程 "{0}"？</value></data>
+  <data name="Dialog.DeleteRemote.Primary" xml:space="preserve"><value>删除</value></data>
+  <data name="Dialog.Common.Cancel" xml:space="preserve"><value>取消</value></data>
+  <data name="Dialog.Common.Save" xml:space="preserve"><value>保存</value></data>
+  <data name="Status.RemoteDeleted" xml:space="preserve"><value>远程已删除。</value></data>
+  <data name="Status.RemoteConnectionSuccess" xml:space="preserve"><value>远程 {0} 连接成功，usbip/sudo 可用。</value></data>
+  <data name="Status.RemoteConnectionMissingRequirements" xml:space="preserve"><value>远程 {0} 可连接，但缺少 usbip 或 sudo。{1}</value></data>
+  <data name="Status.RemoteConnectionFailed" xml:space="preserve"><value>远程连接失败: {0}</value></data>
+  <data name="Status.NodeUnavailable" xml:space="preserve"><value>该节点不可启用分享。</value></data>
+  <data name="Status.DeviceEnabled" xml:space="preserve"><value>设备已启用分享。</value></data>
+  <data name="Status.DeviceDisabled" xml:space="preserve"><value>设备已禁用分享。</value></data>
+  <data name="Status.RuntimeWarning" xml:space="preserve"><value>运行告警: {0}</value></data>
+  <data name="Status.LanguageSavedRestart" xml:space="preserve"><value>语言设置已保存，重启应用后生效。</value></data>
+  <data name="Dialog.RemoteEditor.NameHeader" xml:space="preserve"><value>名称</value></data>
+  <data name="Dialog.RemoteEditor.HostHeader" xml:space="preserve"><value>Host</value></data>
+  <data name="Dialog.RemoteEditor.PortHeader" xml:space="preserve"><value>SSH 端口</value></data>
+  <data name="Dialog.RemoteEditor.UserHeader" xml:space="preserve"><value>用户名</value></data>
+  <data name="Dialog.RemoteEditor.AuthHeader" xml:space="preserve"><value>认证方式</value></data>
+  <data name="Dialog.RemoteEditor.KeyPathHeader" xml:space="preserve"><value>私钥路径(密钥认证)</value></data>
+  <data name="Dialog.RemoteEditor.KeyPathPlaceholder" xml:space="preserve"><value>留空时自动查找 ~/.ssh 下的默认私钥</value></data>
+  <data name="Dialog.RemoteEditor.TunnelPortHeader" xml:space="preserve"><value>远端映射端口</value></data>
+  <data name="Dialog.RemoteEditor.SshPasswordHeader" xml:space="preserve"><value>SSH密码/密钥口令(留空=不修改)</value></data>
+  <data name="Dialog.RemoteEditor.SudoPasswordHeader" xml:space="preserve"><value>sudo密码(留空=不修改)</value></data>
+  <data name="Dialog.RemoteEditor.AddTitle" xml:space="preserve"><value>新增远程</value></data>
+  <data name="Dialog.RemoteEditor.EditTitle" xml:space="preserve"><value>编辑远程</value></data>
+  <data name="Validation.HostUserRequired" xml:space="preserve"><value>Host 和 用户名不能为空。</value></data>
+  <data name="Validation.SshPortRange" xml:space="preserve"><value>SSH 端口必须在 1 到 65535 之间。</value></data>
+  <data name="Validation.TunnelPortRange" xml:space="preserve"><value>远端映射端口必须在 1 到 65535 之间。</value></data>
+  <data name="Validation.PasswordRequiredOnCreate" xml:space="preserve"><value>密码认证在新建时必须提供 SSH 密码。</value></data>
+  <data name="Language.Option.System" xml:space="preserve"><value>跟随系统</value></data>
+  <data name="Language.Option.ZhCn" xml:space="preserve"><value>简体中文</value></data>
+  <data name="Language.Option.EnUs" xml:space="preserve"><value>English</value></data>
+  <data name="AuthType.Password" xml:space="preserve"><value>密码</value></data>
+  <data name="AuthType.PrivateKey" xml:space="preserve"><value>私钥</value></data>
+  <data name="Tree.Subtitle.BusId" xml:space="preserve"><value>BusId: {0}</value></data>
+  <data name="Tree.Subtitle.NotDirectShare" xml:space="preserve"><value>不可直接分享</value></data>
+  <data name="Tree.Status.Unavailable" xml:space="preserve"><value>不可分享</value></data>
+  <data name="Tree.Status.Available" xml:space="preserve"><value>可用</value></data>
+  <data name="Tree.Status.Enabled" xml:space="preserve"><value>已启用</value></data>
+  <data name="Tree.Status.Inherited" xml:space="preserve"><value>继承</value></data>
+  <data name="Tree.Status.Bound" xml:space="preserve"><value>已绑定</value></data>
+  <data name="Tree.Status.Attached" xml:space="preserve"><value>已分享</value></data>
+  <data name="Tree.Status.Error" xml:space="preserve"><value>错误</value></data>
+  <data name="Remote.Subtitle.Format" xml:space="preserve"><value>{0}@{1}:{2} | 隧道:{3} | {4}</value></data>
+  <data name="Error.TargetMissing" xml:space="preserve"><value>选中的远程服务器不存在。请重新选择。</value></data>
+  <data name="Error.RemoteChangedReconnect" xml:space="preserve"><value>远程服务器已更改，将在下一个周期重新连接。</value></data>
+  <data name="Error.RemoteNotSelected" xml:space="preserve"><value>未选择远程服务器。</value></data>
+  <data name="Error.RemoteNotFound" xml:space="preserve"><value>选中的远程服务器不存在。</value></data>
+  <data name="Error.RemoteProbeFailed" xml:space="preserve"><value>远程 {0} 环境检查失败，请确认已安装 usbip 和 sudo。{1}</value></data>
+  <data name="Error.PermissionRequired" xml:space="preserve"><value>usbipd bind 需要管理员权限。</value></data>
+  <data name="Error.Unknown" xml:space="preserve"><value>未知错误</value></data>
+</root>
